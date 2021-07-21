@@ -1,26 +1,7 @@
 #!/bin/sh
-SCR_PATH="../source/common/scripts/"
-# CLEAN OLD BUILD FILES
-${SCR_PATH}clean
 
-# SET COMPILER FLAGS
-. ${SCR_PATH}set_flags
-. ${SCR_PATH}echo_flags
-
-# COMMON MODULES
-SRC_PATH="../source/common/"
-FNAME="Kinds"; . ${SCR_PATH}compile_it
-FNAME="Global"; . ${SCR_PATH}compile_it
-FNAME="Utilities"; . ${SCR_PATH}compile_it
-FNAME="FileIO_Utilities"; . ${SCR_PATH}compile_it
-FNAME="Interpolation"; . ${SCR_PATH}compile_it
-FNAME="Sorting"; . ${SCR_PATH}compile_it
-
-# PARTICLE UTILITIES MODULES
-SRC_PATH="../source/parts/"
-FNAME="cs_Utilities"; . ${SCR_PATH}compile_it
-FNAME="Neutron_Utilities"; . ${SCR_PATH}compile_it
-FNAME="n_Cross_Sections"; . ${SCR_PATH}compile_it
+#COMPILE
+. ./compile_n_Cross_Sections
 
 #TEST PROGRAM
 SRC_PATH="../testing/n_CS/"

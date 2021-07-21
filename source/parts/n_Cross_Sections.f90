@@ -246,8 +246,9 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
     Integer, Allocatable :: abs_modes(:,:)
     Real(dp), Allocatable :: abs_thresh(:,:)
     Logical, Allocatable :: diatomic(:)
-    Integer :: LTT,LRP
+    Integer :: LTT,LRP,LIP,LAW
     Integer :: MT,MF,line_num
+    Real(dp) :: ZAP,AWP
     Character(80) :: trash_c
     Real(dp) :: trash_r
     Logical :: v,first_time
@@ -282,7 +283,7 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
     Do i = 1,n_elements
         !make sure iso_fractions are normalized to 1 within each isotope
         iso_fractions(j:Sum(n_isotopes(1:i))) =  iso_fractions(j:Sum(n_isotopes(1:i))) / Sum(iso_fractions(j:Sum(n_isotopes(1:i))))
-        !combine element and isotpe fractions for total atmospheric fraction of each isotope
+        !combine element and isotope fractions for total atmospheric fraction of each isotope
         iso_fractions(j:Sum(n_isotopes(1:i))) = iso_fractions(j:Sum(n_isotopes(1:i))) * el_fractions(i)
         j = Sum(n_isotopes(1:i)) + 1
     End Do
@@ -358,7 +359,7 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
                     Write(v_unit,'(A15,A4,I0,A4,I0,A1)',ADVANCE='NO') v_string,' MF=',MF,' MT=',MT,' '
                     v_string = ''
                 End If
-                If (MF.EQ.3 .OR. MF.EQ.4) Then
+                If (MF.EQ.3 .OR. MF.EQ.4 .OR. MF.EQ.6) Then
                     If (Any(MT_excluded .EQ. MT)) Then !this interaction type is excluded, advance past it
                         If (first_time .AND. v) Write(v_unit,'(A)',ADVANCE='YES') ' - excluded'  !FIRST TIME
                         !advance to end of section
@@ -464,6 +465,93 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
                                 n_p = n_p + n_p_2
                             Else  !SECOND TIME
                                 ! If (LTT .EQ. 0) Then !da is isotropic, no energies to read
+                                If (LTT .EQ. 1) Then  !da is lists of legendre coeffs
+                                    Do j = 1,n_p
+                                        !The first line in each energy contains the energy in eV in the second position and the 
+                                        !number of Legendre coefficients in the 5th position
+                                        Read(ENDF_unit,'(A11,E11.6E1,A22,I11)') trash_c, E_uni_scratch(n_start+j), trash_c, n_a
+                                        n_a_lines = (n_a / 6)  !integer divide
+                                        If (Mod(n_a,6) .GT. 0) n_a_lines = n_a_lines + 1
+                                        !advance to the next energy
+                                        Do k = 1,n_a_lines
+                                            Read(ENDF_unit,*)
+                                        End Do
+                                    End Do
+                                Else If (LTT .EQ. 2) Then  !da is tabulated
+                                    Do j = 1,n_p
+                                        !The first line in each energy contains the energy in eV in the second position
+                                        Read(ENDF_unit,'(A11,E11.6E1)') trash_c, E_uni_scratch(n_start+j)
+                                        !the next line contains the number of tabulation points in the first position
+                                        Read(ENDF_unit,'(I11)') n_a
+                                        n_a_lines = (n_a / 3)  !integer divide
+                                        If (Mod(n_a,3) .GT. 0) n_a_lines = n_a_lines + 1
+                                        !advance to the next energy
+                                        Do k = 1,n_a_lines
+                                            Read(ENDF_unit,*)
+                                        End Do
+                                    End Do
+                                Else If (LTT .EQ. 3) Then  !da is tabulated for high energies but legendre for low energies
+                                    !Read in low energy Legendre points
+                                    Do j = 1,n_p
+                                        !The first line in each energy contains the energy in eV in the second position and the 
+                                        !number of Legendre coefficients in the 5th position
+                                        Read(ENDF_unit,'(A11,E11.6E1,A22,I11)') trash_c, E_uni_scratch(n_start+j), trash_c, n_a
+                                        n_a_lines = (n_a / 6)  !integer divide
+                                        If (Mod(n_a,6) .GT. 0) n_a_lines = n_a_lines + 1
+                                        !advance to the next energy
+                                        Do k = 1,n_a_lines
+                                            Read(ENDF_unit,*)
+                                        End Do
+                                    End Do
+                                    Read(ENDF_unit,*)
+                                    !first entry of next line is number of additional energy points
+                                    Read (ENDF_unit,'(I11)') n_p_2
+                                    !Read in high energy tabulated cosine points
+                                    Do j = n_p+1,n_p+n_p_2
+                                        !The first line in each energy contains the energy in eV in the second position
+                                        Read(ENDF_unit,'(A11,E11.6E1)') trash_c, E_uni_scratch(n_start+j)
+                                        !the next line contains the number of tabulation points in the first position
+                                        Read(ENDF_unit,'(I11)') n_a
+                                        n_a_lines = (n_a / 3)  !integer divide
+                                        If (Mod(n_a,3) .GT. 0) n_a_lines = n_a_lines + 1
+                                        !advance to the next energy
+                                        Do k = 1,n_a_lines
+                                            Read(ENDF_unit,*)
+                                        End Do
+                                    End Do
+                                    !update total n_p
+                                    n_p = n_p + n_p_2
+                                End If
+                            End If
+                        Case(6)
+                            If (first_time .AND. v) Then  !FIRST TIME
+                                If (Any(MT_disappearance.EQ.MT)) Then
+                                    Write(v_unit,'(A)',ADVANCE='NO') ', absorption'
+                                Else If (Any(MT_inelastic.EQ.MT)) Then
+                                    Write(v_unit,'(A)',ADVANCE='NO') ', inelastic'
+                                End If
+                            End If
+                            !find the start of the section describing the angular distribution of the neutron on the exit channel
+                            Do
+                                Read(ENDF_unit,'(2E11.6E1,2I11)') ZAP,AWP,LIP,LAW
+                                If (ZAP.EQ.1._dp .AND. AWP.EQ.1._dp .AND. LAW.EQ.2) Exit !this is first line in the correct section
+                            End Do
+                            !the next 2 lines are always discarded
+                            Read(ENDF_unit,*)
+                            Read(ENDF_unit,*)
+                            Read(ENDF_unit,'(A55,I11)') trash_c,n_p
+                            Read(ENDF_unit,*)
+                            If (first_time) Then  !FIRST TIME
+                                n_p_2 = 0
+                                If (v) Write(v_unit,'(A,I0,A)',ADVANCE='YES') ', ',n_p,' E-points'
+                                n_p = n_p + n_p_2
+                            Else  !SECOND TIME
+
+
+
+
+
+
                                 If (LTT .EQ. 1) Then  !da is lists of legendre coeffs
                                     Do j = 1,n_p
                                         !The first line in each energy contains the energy in eV in the second position and the 
@@ -1171,9 +1259,10 @@ Subroutine Read_res_sect(res_unit,res_List)
 
     Integer :: i,J,k,l,r,d
     Real(dp) :: trash
-    Integer :: LRF,NRO,NAPS,SPI,AP
+    Integer :: LRF,NRO,NAPS
+    Real(dp) :: SPI,AP
     Integer :: nL,nR,nJ
-    Real(dp) :: awri
+    Real(dp) :: AWRI
     Real(dp), Allocatable :: res_scratch(:,:),Js(:)
     Real(dp), Allocatable :: J_min(:),J_max(:)
     Real(dp) :: s_min,s_max,si
@@ -1218,7 +1307,10 @@ Subroutine Read_res_sect(res_unit,res_List)
         Read(res_unit,'(5E11.6E1,I11)') AWRI, AP, trash, trash, trash, nR
         If (AP .NE. 0._dp) res_List%a(2,l) = AP  !level specific scattering radius
         !Allocate a scratch array
-        If (l .GT. 1) Deallocate(res_scratch)
+        If (l .GT. 1) Then
+            Deallocate(res_scratch)
+            Deallocate(Js)
+        End If
         Allocate(res_scratch(1:nR,1:6))
         res_scratch = -1._dp
         Allocate(Js(1:nR))
@@ -1242,7 +1334,11 @@ Subroutine Read_res_sect(res_unit,res_List)
         End If
         !count unique spin values
         Js = res_scratch(:,2)
-        Call Union_Sort(Js,nJ)
+        If (nR .GT. 1) Then
+            Call Union_Sort(Js,nJ)
+        Else
+            nJ = 1
+        End If
         !Allocate and fill spin groups for this level
         res_list%L(l)%n_J = nJ
         !total angular momentum
@@ -1312,8 +1408,8 @@ Subroutine Read_res_sect(res_unit,res_List)
                 End If
             End Do
             !precompute shift and penetrability factors at each stored resonanace
-            res_list%L(l)%J(J)%ErG(:,d-1) = ShiftFact(l,res_list%k0*Sqrt(res_list%L(l)%J(J)%ErG(:,1)))
-            res_list%L(l)%J(J)%ErG(:,d) = PenetFact(l,res_list%k0*Sqrt(res_list%L(l)%J(J)%ErG(:,1)))
+            res_list%L(l)%J(J)%ErG(:,d-1) = ShiftFact( l , res_list%k0*Sqrt( Abs(res_list%L(l)%J(J)%ErG(:,1)) ) )
+            res_list%L(l)%J(J)%ErG(:,d) = PenetFact( l , res_list%k0*Sqrt( Abs(res_list%L(l)%J(J)%ErG(:,1)) ) )
         End Do
     End Do
 End Subroutine Read_res_sect
