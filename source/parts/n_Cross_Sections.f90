@@ -243,8 +243,8 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
     Type(da_List_type), Allocatable :: Ang_Dist_scratch(:)
     Integer :: setup_unit,ENDF_unit,v_unit,stat
     Integer, Allocatable :: n_abs_modes(:),n_inel_lev(:)
-    Integer, Allocatable :: abs_modes(:,:)
-    Real(dp), Allocatable :: abs_thresh(:,:)
+    Integer, Allocatable :: abs_modes(:,:),inel_levs(:,:)
+    Real(dp), Allocatable :: abs_thresh(:,:),inel_thresh(:,:)
     Logical, Allocatable :: diatomic(:)
     Integer :: LTT,LRP,LIP,LAW
     Integer :: MT,MF,line_num
@@ -328,11 +328,15 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
             n_inel_lev = 0
         Else  !SECOND TIME
             n_start = 0
-            !Allocate scratch arrays for ordering absorption modes
+            !Allocate scratch arrays for ordering absorption modes and inelastic levels
             Allocate(abs_modes(1:MaxVal(n_abs_modes),1:CS%n_iso))
             abs_modes = -1
             Allocate(abs_thresh(1:MaxVal(n_abs_modes),1:CS%n_iso))
             abs_thresh = Huge(abs_thresh)
+            Allocate(inel_levs(1:MaxVal(n_inel_lev),1:CS%n_iso))
+            inel_levs = -1
+            Allocate(inel_thresh(1:MaxVal(n_inel_lev),1:CS%n_iso))
+            inel_thresh = Huge(abs_thresh)
             !Allocate scratch arrays for energy
             Allocate(E_uni_scratch(1:n_energies))
             E_uni_scratch = -1._dp
@@ -360,7 +364,8 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
                     v_string = ''
                 End If
                 If (MF.EQ.3 .OR. MF.EQ.4 .OR. MF.EQ.6) Then
-                    If (Any(MT_excluded .EQ. MT)) Then !this interaction type is excluded, advance past it
+                    If ( Any(MT_excluded .EQ. MT) .OR. & 
+                       & (MF.EQ.6 .AND. Any(MT_disappearance .EQ. MT)) ) Then !this type/file is excluded, advance past it
                         If (first_time .AND. v) Write(v_unit,'(A)',ADVANCE='YES') ' - excluded'  !FIRST TIME
                         !advance to end of section
                         Call Find_MFMT_end(ENDF_unit)
@@ -375,7 +380,7 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
                             If (first_time) Then  !FIRST TIME
                                 If (Any(MT_disappearance .EQ. MT)) Then
                                     n_abs_modes(i) = n_abs_modes(i) + 1
-                                    If (v) Write(v_unit,'(A)',ADVANCE='NO') ', absorption'
+                                    If (v) Write(v_unit,'(A)',ADVANCE='NO') ', disappearance'
                                 Else If (Any(MT_inelastic .EQ. MT)) Then
                                     n_inel_lev(i) = n_inel_lev(i) + 1
                                     If (v) Write(v_unit,'(A)',ADVANCE='NO') ', inelastic'
@@ -418,6 +423,22 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
                                                     Exit
                                                 End If
                                             End Do
+                                        Else If (Any(MT_inelastic .EQ. MT)) Then  !this is an inelastic mode
+                                            !add it to the list of inelastic modes, inserting in order of acending threshold energy
+                                            Do k = 1,n_inel_lev(i)
+                                                If (E_uni_scratch(n_start+j) .LT. inel_thresh(k,i)) Then 
+                                                !this k is where this mode goes in the list
+                                                    If (k .LT. n_inel_lev(i)) Then 
+                                                    !make room by shifting the rest of the list down
+                                                        inel_thresh(k+1:n_inel_lev(i),i) = inel_thresh(k:n_inel_lev(i)-1,i)
+                                                        inel_levs(k+1:n_inel_lev(i),i) = inel_levs(k:n_inel_lev(i)-1,i)
+                                                    End If
+                                                    !insert
+                                                    inel_thresh(k,i) = E_uni_scratch(n_start+j)
+                                                    inel_levs(k,i) = MT
+                                                    Exit
+                                                End If
+                                            End Do
                                         End If
                                     End If
                                 End Do
@@ -425,7 +446,7 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
                         Case (4)
                             If (first_time .AND. v) Then  !FIRST TIME
                                 If (Any(MT_disappearance.EQ.MT)) Then
-                                    Write(v_unit,'(A)',ADVANCE='NO') ', absorption'
+                                    Write(v_unit,'(A)',ADVANCE='NO') ', disappearance'
                                 Else If (Any(MT_inelastic.EQ.MT)) Then
                                     Write(v_unit,'(A)',ADVANCE='NO') ', inelastic'
                                 End If
@@ -526,7 +547,7 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
                         Case(6)
                             If (first_time .AND. v) Then  !FIRST TIME
                                 If (Any(MT_disappearance.EQ.MT)) Then
-                                    Write(v_unit,'(A)',ADVANCE='NO') ', absorption'
+                                    Write(v_unit,'(A)',ADVANCE='NO') ', disappearance'
                                 Else If (Any(MT_inelastic.EQ.MT)) Then
                                     Write(v_unit,'(A)',ADVANCE='NO') ', inelastic'
                                 End If
@@ -634,8 +655,21 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
                 Do i = 1,CS%n_iso
                     Write(v_unit,'(A,I0,A,I0,A)') Trim(isotope_names(i))//' ENDF tape contains ',n_abs_modes(i), & 
                                                 & ' absorption modes and ',n_inel_lev(i),' inelastic levels'
-                    Do j = 1,n_abs_modes(i)
-                        Write(v_unit,'(A,I5,ES26.16E3)') '  ',abs_modes(j,i),abs_thresh(j,i)
+                    Write(v_unit,'(A15,A26,A17,A26)') 'Absorption MT','Threshold Energy [keV]', & 
+                                                    & 'Inelastic MT','Threshold Energy [keV]'
+                    Write(v_unit,'(A15,A26,A17,A26)') '-------------','-----------------------', & 
+                                                    & '-------------','-----------------------'
+                    Do j = 1,Max(n_abs_modes(i),n_inel_lev(i))
+                        If (j .LE. n_abs_modes(i)) Then
+                            Write(v_unit,'(I15,ES26.16E3)',ADVANCE='NO') abs_modes(j,i),abs_thresh(j,i)/1000._dp
+                        Else
+                            Write(v_unit,'(A41)',ADVANCE='NO') ''
+                        End If
+                        If (j .LE. n_inel_lev(i)) Then
+                            Write(v_unit,'(I17,ES26.16E3)') inel_levs(j,i),inel_thresh(j,i)/1000._dp
+                        Else
+                            Write(v_unit,*)
+                        End If
                     End Do
                 End Do
                 Write(v_unit,'(I0,A)') n_energies,' total energies to map on unified list'
@@ -658,13 +692,12 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
                 Write(v_unit,'(A)') half_dash_line
                 Write(v_unit,'(A)') 'UNIFIED ENERGY LIST'
                 Write(v_unit,'(A)') half_dash_line
-                Write(v_unit,*)
-                Write(v_unit,'(I0,A,F0.2,A)') CS%n_E_uni,' unique points in unified grid, (', & 
-                                            & 100._dp*Real(CS%n_E_uni,dp)/Real(n_p,dp),'%)'
-                Write(v_unit,'(A7,2A26)') ' Index ','   E [keV]                ','   ln(E)                  '
-                Write(v_unit,'(A7,2A26)') '-------','  ------------------------','  ------------------------'
+                Write(v_unit,'(I0,A,I0,A,F0.2,A)') CS%n_E_uni,' unique points in unified grid out of ',n_p,', (', & 
+                                                 & 100._dp*Real(CS%n_E_uni,dp)/Real(n_p,dp),'%)'
+                Write(v_unit,'(A9,2A26)') ' Index ',' E [keV]                ',' ln(E)                  '
+                Write(v_unit,'(A9,2A26)') '-------','------------------------','------------------------'
                 Do i = 1,n_energies
-                    Write(v_unit,'(I7,2ES26.16E3)') i,CS%E_uni(i),CS%lnE_uni(i)
+                    Write(v_unit,'(I9,2ES26.16E3)') i,CS%E_uni(i),CS%lnE_uni(i)
                 End Do
             End If
         End If
