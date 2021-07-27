@@ -243,7 +243,7 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
     Type(da_List_type), Allocatable :: Ang_Dist_scratch(:)
     Integer :: setup_unit,ENDF_unit,v_unit,stat
     Integer, Allocatable :: n_abs_modes(:),n_inel_lev(:)
-    Integer, Allocatable :: abs_modes(:,:),inel_levs(:,:)
+    Integer, Allocatable :: abs_modes(:,:),inel_levs(:,:),inel_da_mf(:,:)
     Real(dp), Allocatable :: abs_thresh(:,:),inel_thresh(:,:)
     Logical, Allocatable :: diatomic(:)
     Integer :: LTT,LRP,LIP,LAW
@@ -253,6 +253,7 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
     Real(dp) :: trash_r
     Logical :: v,first_time
     Character(15) :: v_string
+    Character(3) :: MFc,MTc
 
     NameList /csSetupList1/ n_elements
     NameList /csSetupList2/ el_fractions,n_isotopes
@@ -335,6 +336,8 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
             abs_thresh = Huge(abs_thresh)
             Allocate(inel_levs(1:MaxVal(n_inel_lev),1:CS%n_iso))
             inel_levs = -1
+            Allocate(inel_da_mf(1:MaxVal(n_inel_lev),1:CS%n_iso))
+            inel_da_mf = -1
             Allocate(inel_thresh(1:MaxVal(n_inel_lev),1:CS%n_iso))
             inel_thresh = Huge(abs_thresh)
             !Allocate scratch arrays for energy
@@ -365,7 +368,7 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
                 End If
                 If (MF.EQ.3 .OR. MF.EQ.4 .OR. MF.EQ.6) Then
                     If ( Any(MT_excluded .EQ. MT) .OR. & 
-                       & (MF.EQ.6 .AND. Any(MT_disappearance .EQ. MT)) ) Then !this type/file is excluded, advance past it
+                       & (MF.EQ.6 .AND. Any(MT_disappearance.EQ.MT)) ) Then !this type/file is excluded, advance past it
                         If (first_time .AND. v) Write(v_unit,'(A)',ADVANCE='YES') ' - excluded'  !FIRST TIME
                         !advance to end of section
                         Call Find_MFMT_end(ENDF_unit)
@@ -567,69 +570,17 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
                                 If (v) Write(v_unit,'(A,I0,A)',ADVANCE='YES') ', ',n_p,' E-points'
                                 n_p = n_p + n_p_2
                             Else  !SECOND TIME
-
-
-
-
-
-
-                                If (LTT .EQ. 1) Then  !da is lists of legendre coeffs
-                                    Do j = 1,n_p
-                                        !The first line in each energy contains the energy in eV in the second position and the 
-                                        !number of Legendre coefficients in the 5th position
-                                        Read(ENDF_unit,'(A11,E11.6E1,A22,I11)') trash_c, E_uni_scratch(n_start+j), trash_c, n_a
-                                        n_a_lines = (n_a / 6)  !integer divide
-                                        If (Mod(n_a,6) .GT. 0) n_a_lines = n_a_lines + 1
-                                        !advance to the next energy
-                                        Do k = 1,n_a_lines
-                                            Read(ENDF_unit,*)
-                                        End Do
+                                Do j = 1,n_p
+                                    !The first line in each energy contains the energy in eV in the second position and the 
+                                    !number of Legendre coefficients in the 5th position
+                                    Read(ENDF_unit,'(A11,E11.6E1,A22,I11)') trash_c, E_uni_scratch(n_start+j), trash_c, n_a
+                                    n_a_lines = (n_a / 6)  !integer divide
+                                    If (Mod(n_a,6) .GT. 0) n_a_lines = n_a_lines + 1
+                                    !advance to the next energy
+                                    Do k = 1,n_a_lines
+                                        Read(ENDF_unit,*)
                                     End Do
-                                Else If (LTT .EQ. 2) Then  !da is tabulated
-                                    Do j = 1,n_p
-                                        !The first line in each energy contains the energy in eV in the second position
-                                        Read(ENDF_unit,'(A11,E11.6E1)') trash_c, E_uni_scratch(n_start+j)
-                                        !the next line contains the number of tabulation points in the first position
-                                        Read(ENDF_unit,'(I11)') n_a
-                                        n_a_lines = (n_a / 3)  !integer divide
-                                        If (Mod(n_a,3) .GT. 0) n_a_lines = n_a_lines + 1
-                                        !advance to the next energy
-                                        Do k = 1,n_a_lines
-                                            Read(ENDF_unit,*)
-                                        End Do
-                                    End Do
-                                Else If (LTT .EQ. 3) Then  !da is tabulated for high energies but legendre for low energies
-                                    !Read in low energy Legendre points
-                                    Do j = 1,n_p
-                                        !The first line in each energy contains the energy in eV in the second position and the 
-                                        !number of Legendre coefficients in the 5th position
-                                        Read(ENDF_unit,'(A11,E11.6E1,A22,I11)') trash_c, E_uni_scratch(n_start+j), trash_c, n_a
-                                        n_a_lines = (n_a / 6)  !integer divide
-                                        If (Mod(n_a,6) .GT. 0) n_a_lines = n_a_lines + 1
-                                        !advance to the next energy
-                                        Do k = 1,n_a_lines
-                                            Read(ENDF_unit,*)
-                                        End Do
-                                    End Do
-                                    Read(ENDF_unit,*)
-                                    !first entry of next line is number of additional energy points
-                                    Read (ENDF_unit,'(I11)') n_p_2
-                                    !Read in high energy tabulated cosine points
-                                    Do j = n_p+1,n_p+n_p_2
-                                        !The first line in each energy contains the energy in eV in the second position
-                                        Read(ENDF_unit,'(A11,E11.6E1)') trash_c, E_uni_scratch(n_start+j)
-                                        !the next line contains the number of tabulation points in the first position
-                                        Read(ENDF_unit,'(I11)') n_a
-                                        n_a_lines = (n_a / 3)  !integer divide
-                                        If (Mod(n_a,3) .GT. 0) n_a_lines = n_a_lines + 1
-                                        !advance to the next energy
-                                        Do k = 1,n_a_lines
-                                            Read(ENDF_unit,*)
-                                        End Do
-                                    End Do
-                                    !update total n_p
-                                    n_p = n_p + n_p_2
-                                End If
+                                End Do
                             End If
                     End Select
                     If (first_time) Then  !FIRST TIME
@@ -728,7 +679,12 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
         !!  ABSORPTION INTERACTION CROSS SECTIONS
         Do j = 1,n_abs_modes(i)
             !Find this interaction in the ENDF tape (MF=3, MT=abs_modes(j,i))
-            Call Find_MFMT(ENDF_unit,3,abs_modes(j,i))
+            If (.NOT.Find_MFMT(ENDF_unit,3,abs_modes(j,i))) Then
+                Write(MFc,'(I3)') 3
+                Write(MTc,'(I3)') abs_modes(j,i)
+                Call Output_Message( 'ERROR:  Cross_Sections: Setup_Cross_Sections:  Section not found, MF='//MFc//', MT='//MTc, & 
+                                    & kill=.TRUE. )
+            End If    
             !the next read statement on ENDF_unit will read the first line of MF=3, MT=abs_modes(j,i)
             Call Read_sig_sect(ENDF_unit,Q_scratch,An_scratch,E_scratch,sig_scratch,Interp_scratch,n_p,n_r)
             If (Trim_CS_for_E(n_p,E_scratch,sig_scratch,n_r,Interp_scratch,E_min,E_max)) Then
@@ -756,13 +712,23 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
         Allocate(CS%lev_cs(i)%sig(0:n_inel_lev(i)))
         If (aniso_dist) Allocate(CS%lev_cs(i)%da(0:n_inel_lev(i)))
         !check if resonance cross sections are present
-        Call Find_MFMT(ENDF_unit,1,451)
+        If (.NOT.Find_MFMT(ENDF_unit,1,451)) Then
+            Write(MFc,'(I3)') 1
+            Write(MTc,'(I3)') 451
+            Call Output_Message( 'ERROR:  Cross_Sections: Setup_Cross_Sections:  Section not found, MF='//MFc//', MT='//MTc, & 
+                                & kill=.TRUE. )
+        End If    
         !the next read statement on ENDF_unit will read the first line of MF=1, MT=451
         Read(ENDF_unit,'(A22,I11)') trash_c,LRP
         If (LRP .EQ. 1) Then  !resonance parameters are included in the ENDF tape
             CS%has_res_cs(i) = .TRUE.
             !Find this interaction in the ENDF tape (MF=2, MT=151)
-            Call Find_MFMT(ENDF_unit,2,151)
+            If (.NOT.Find_MFMT(ENDF_unit,2,151)) Then
+                Write(MFc,'(I3)') 2
+                Write(MTc,'(I3)') 151
+                Call Output_Message( 'ERROR:  Cross_Sections: Setup_Cross_Sections:  Section not found, MF='//MFc//', MT='//MTc, & 
+                                    & kill=.TRUE. )
+            End If    
             !the next read statement on ENDF_unit will read the first line of MF=2, MT=151
             Call Read_res_sect(ENDF_unit,CS%res_cs(i))
             If (v) Then  !write the stored values for this resonance representation
@@ -782,7 +748,12 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
         End If
         !!  ELASTIC SCATTERING INTERACTION CROSS SECTION
         !Find this interaction in the ENDF tape (MF=3, MT=2)
-        Call Find_MFMT(ENDF_unit,3,2)
+        If (.NOT.Find_MFMT(ENDF_unit,3,2)) Then
+            Write(MFc,'(I3)') 3
+            Write(MTc,'(I3)') 2
+            Call Output_Message( 'ERROR:  Cross_Sections: Setup_Cross_Sections:  Section not found, MF='//MFc//', MT='//MTc, & 
+                                & kill=.TRUE. )
+        End If    
         !the next read statement on ENDF_unit will read the first line of MF=3, MT=2
         Call Read_sig_sect(ENDF_unit,Q_scratch,CS%An(i),E_scratch,sig_scratch,Interp_scratch,n_p,n_r)
         If (Trim_CS_for_E(n_p,E_scratch,sig_scratch,n_r,Interp_scratch,E_min,E_max)) Then
@@ -804,9 +775,14 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
         !!  ELASTIC SCATTERING ANGULAR DISTRIBUTION
         If (aniso_dist) Then  !need elastic ang dist file
             !Find this interaction in the ENDF tape (MF=4, MT=2)
-            Call Find_MFMT(ENDF_unit,4,2)
+            If (.NOT.Find_MFMT(ENDF_unit,4,2)) Then
+                Write(MFc,'(I3)') 4
+                Write(MTc,'(I3)') 2
+                Call Output_Message( 'ERROR:  Cross_Sections: Setup_Cross_Sections:  Section not found, MF='//MFc//', MT='//MTc, & 
+                                    & kill=.TRUE. )
+            End If    
             !the next read statement on ENDF_unit will read the first line of MF=4, MT=2
-            Call Read_da_sect(ENDF_unit,E_scratch,Ang_dist_scratch,n_p,LTT)
+            Call Read_da_sect_MF4(ENDF_unit,E_scratch,Ang_dist_scratch,n_p,LTT)
             If (LTT .EQ. 0) Then
                 CS%lev_cs(i)%da(0)%n_da = 0
                 CS%lev_cs(i)%da(0)%is_iso = .TRUE.
@@ -848,7 +824,12 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
         Do j = 1,n_inel_lev(i)
             !!  INELASTIC SCATTER INTERACTION CROSS SECTION
             !Find this interaction in the ENDF tape (MF=3, MT=50+j)
-            Call Find_MFMT(ENDF_unit,3,50+j)
+            If (.NOT.Find_MFMT(ENDF_unit,3,50+j)) Then
+                Write(MFc,'(I3)') 3
+                Write(MTc,'(I3)') 50+j
+                Call Output_Message( 'ERROR:  Cross_Sections: Setup_Cross_Sections:  Section not found, MF='//MFc//', MT='//MTc, & 
+                                    & kill=.TRUE. )
+            End If    
             !the next read statement on ENDF_unit will read the first line of MF=3, MT=50+j
             Call Read_sig_sect(ENDF_unit,Q_scratch,An_scratch,E_scratch,sig_scratch,Interp_scratch,n_p,n_r)
             If (Trim_CS_for_E(n_p,E_scratch,sig_scratch,n_r,Interp_scratch,E_min,E_max)) Then
@@ -870,14 +851,33 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
             End If
             !!  INELASTIC SCATTER ANGULAR DISTRIBUTION
             If (aniso_dist) Then  !need inelastic level ang dist files
-                !Find this interaction in the ENDF tape (MF=4, MT=50+j)
-                Call Find_MFMT(ENDF_unit,4,50+j)
-                !the next read statement on ENDF_unit will read the first line of MF=4, MT=50+j
-                Call Read_da_sect(ENDF_unit,E_scratch,Ang_dist_scratch,n_p,LTT)
-                If (LTT .EQ. 0) Then
+                !Find this interaction in the ENDF tape (MF=4 or MF=6, MT=50+j)
+                If (.NOT.Find_MFMT(ENDF_unit,4,50+j)) Then
+                    If (.NOT.Find_MFMT(ENDF_unit,6,50+j)) Then
+                        MFc = '4,6'
+                        Write(MTc,'(I3)') 50+j
+                        Call Output_Message( 'ERROR:  Cross_Sections: Setup_Cross_Sections:  Section not found, MF='//MFc// & 
+                                             ', MT='//MTc,kill=.TRUE. )
+                    Else
+                        MF = 6
+                    End If
+                Else
+                    MF = 4
+                End If    
+                LTT = -HUGE(LTT)
+                LAW = -HUGE(LAW)
+                Select Case (MF)
+                    Case(4)
+                        !the next read statement on ENDF_unit will read the first line of MF=4, MT=50+j
+                        Call Read_da_sect_MF4(ENDF_unit,E_scratch,Ang_dist_scratch,n_p,LTT)
+                    Case(6)
+                        !the next read statement on ENDF_unit will read the first line of MF=6, MT=50+j
+                        Call Read_da_sect_MF6(ENDF_unit,E_scratch,Ang_dist_scratch,n_p,LAW)
+                End Select
+                If (LTT.EQ.0 .OR. LAW.EQ.3) Then  !da is isotropic
                     CS%lev_cs(i)%da(j)%n_da = 0
                     CS%lev_cs(i)%da(j)%is_iso = .TRUE.
-                Else
+                Else  !da has been read, map and store the distribution data
                     If (Trim_AD_for_E(n_p,E_scratch,Ang_dist_scratch,E_min,E_max)) Then
                         Call Map_and_Store_AD( CS%n_E_uni, & 
                                                 & CS%E_uni, & 
@@ -890,10 +890,10 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
                     Deallocate(E_scratch,Ang_dist_scratch)
                 End If
                 If (v) Then  !write the stored values for this inelastic scatter angular distribution
-                    Write(v_unit,'(A,I0,A,I0,A)') Trim(isotope_names(i))//' MF=',4,', MT=',50+j,' (da, inelastic)'
+                    Write(v_unit,'(A,I0,A,I0,A)') Trim(isotope_names(i))//' MF=',MF,', MT=',50+j,' (da, inelastic)'
                     Call Write_stored_AD(v_unit,CS%lev_cs(i)%da(j),CS%n_E_uni,CS%E_uni)
                 End If
-                If (LTT .EQ. 1) Then
+                If (LTT.EQ.1 .OR. LAW.EQ.3) Then
                     If (MaxVal(CS%lev_cs(i)%da(j)%da(:)%n_a) .GT. CS%n_a_max) CS%n_a_max = MaxVal(CS%lev_cs(i)%da(j)%da(:)%n_a)
                 Else If (LTT .EQ. 2) Then
                     If (MaxVal(CS%lev_cs(i)%da(j)%da(:)%n_a) .GT. CS%n_a_tab_max) & 
@@ -1047,32 +1047,96 @@ Subroutine Find_MFMT_end(ENDF_unit)
     End Do
 End Subroutine Find_MFMT_end
 
-Subroutine Find_MFMT(ENDF_unit,MFi,MTi)
-    Use FileIO_Utilities, Only: Output_Message
+! Subroutine Find_MFMT(ENDF_unit,MFi,MTi)
+!     Use FileIO_Utilities, Only: Output_Message
+!     Implicit None
+!     Integer, Intent(In) :: ENDF_unit
+!     Integer, Intent(In) :: MFi,MTi
+!     Integer :: MF,MT
+!     Character(80) :: trash_c
+!     Integer :: stat
+!     Character(3) :: MFc,MTc
+
+!     !Find this interaction (MFi,MTi) in the ENDF tape
+!     Rewind(ENDF_unit)  !return to the start of the file
+!     Do
+!         Read(ENDF_unit,'(A71,I1,I3)',IOSTAT=stat) trash_c,MF,MT
+!         If (stat .LT. 0) Then
+!             Write(MFc,'(I3)') MFi
+!             Write(MTc,'(I3)') MTi
+!             Call Output_Message('ERROR:  Cross_Sections: Find_MFMT:  Section not found, MF='//MFc//', MT='//MTc,kill=.TRUE.)
+!         End If
+!         If (MF.EQ.MFi .AND. MT.EQ.MTi) Then
+!             Backspace(ENDF_unit)  !go back one line
+!             Exit
+!         End If
+!     End Do
+!     !the next read statement on ENDF_unit will read the first line of MFi, MTi
+! End Subroutine Find_MFMT
+
+Function Find_MFMT(ENDF_unit,MFi,MTi) Result(bingo)
     Implicit None
+    Logical :: bingo
     Integer, Intent(In) :: ENDF_unit
     Integer, Intent(In) :: MFi,MTi
     Integer :: MF,MT
     Character(80) :: trash_c
     Integer :: stat
-    Character(3) :: MFc,MTc
 
+    bingo = .FALSE.
     !Find this interaction (MFi,MTi) in the ENDF tape
     Rewind(ENDF_unit)  !return to the start of the file
     Do
         Read(ENDF_unit,'(A71,I1,I3)',IOSTAT=stat) trash_c,MF,MT
-        If (stat .LT. 0) Then
-            Write(MFc,'(I3)') MFi
-            Write(MTc,'(I3)') MTi
-            Call Output_Message('ERROR:  Cross_Sections: Find_MFMT:  Section not found, MF='//MFc//', MT='//MTc,kill=.TRUE.)
-        End If
+        If (stat .LT. 0) Return
         If (MF.EQ.MFi .AND. MT.EQ.MTi) Then
+            bingo = .TRUE.
             Backspace(ENDF_unit)  !go back one line
             Exit
         End If
     End Do
     !the next read statement on ENDF_unit will read the first line of MFi, MTi
-End Subroutine Find_MFMT
+End Function Find_MFMT
+
+! Subroutine Find_MFMT_multiMF(ENDF_unit,MFi,MTi,MF_found)
+!     Use FileIO_Utilities, Only: Output_Message
+!     Implicit None
+!     Integer, Intent(In) :: ENDF_unit
+!     Integer, Intent(In) :: MFi(:),MTi
+!     Integer, Intent(Out) :: MF_found
+!     Integer :: MF,MT
+!     Character(80) :: trash_c
+!     Integer :: stat
+!     Character(3) :: MFc,MTc
+!     Character(13) :: MFc_list
+!     Integer :: i,j,n
+
+!     !Find this interaction (MFi,MTi) in the ENDF tape
+!     n = Size(MFi)
+!     Do i = 1,n
+!         Rewind(ENDF_unit)  !return to the start of the file
+!         Do
+!             Read(ENDF_unit,'(A71,I1,I3)',IOSTAT=stat) trash_c,MF,MT
+!             If (stat.LT.0 .AND. i.GE.n) Then
+!                 MFc_list = ''
+!                 Do j = 1,n
+!                     Write(MFc,'(I3)') MFi(j)
+!                     If (j .GT. 1) MFc_list = Trim(MFc_list)//','
+!                     MFc_list = Trim(MFc_list)//Trim(MFc)
+!                 End Do
+!                 Write(MTc,'(I3)') MTi
+!                 Call Output_Message( 'ERROR:  Cross_Sections: Find_MFMT:  Section not found, MF='//Trim(MFc_list)//', MT='//MTc, & 
+!                                    & kill=.TRUE.)
+!             End If
+!             If (MF.EQ.MFi(i) .AND. MT.EQ.MTi) Then
+!                 MF_found = MFi(i)
+!                 Backspace(ENDF_unit)  !go back one line
+!                 Return
+!             End If
+!         End Do
+!     End Do
+!     !the next read statement on ENDF_unit will read the first line of MFi, MTi
+! End Subroutine Find_MFMT_multiMF
 
 Subroutine Read_sig_sect(cs_unit,Q,An,E_list,sig_list,Int_list,n_p,n_r)
     Use Kinds, Only: dp
@@ -1129,7 +1193,7 @@ Subroutine Read_sig_sect(cs_unit,Q,An,E_list,sig_list,Int_list,n_p,n_r)
     E_list = E_list / 1000._dp
 End Subroutine Read_sig_sect
 
-Subroutine Read_da_sect(da_unit,E_list,da_list,n_p,LTT)
+Subroutine Read_da_sect_MF4(da_unit,E_list,da_list,n_p,LTT)
     Use Kinds, Only: dp
     Use FileIO_Utilities, Only: Output_Message
     Implicit None
@@ -1278,7 +1342,69 @@ Subroutine Read_da_sect(da_unit,E_list,da_list,n_p,LTT)
         n_p = n_p + n_p_2
     End If
     E_list = E_list / 1000._dp
-End Subroutine Read_da_sect
+End Subroutine Read_da_sect_MF4
+
+Subroutine Read_da_sect_MF6(da_unit,E_list,da_list,n_p,LAW)
+    Use Kinds, Only: dp
+    Use FileIO_Utilities, Only: Output_Message
+    Implicit None
+    Integer, Intent(In) :: da_unit  !unit number for the ENDF tape file
+    !cursor must already be positioned in the file so that the next read will be the first line of the appropriate section
+    Real(dp), Allocatable, Intent(Out) :: E_list(:)
+    Type(da_List_type), Allocatable, Intent(Out) :: da_list(:)
+    Integer, Intent(Out):: n_p,LAW
+    Integer :: i,j
+    Real(dp) :: trash
+    Integer :: trash_i
+    Character(80) :: trash_c
+    Integer :: n_a,n_a_lines,n_skipped_lines
+    Integer :: LCT,LIP,LANG
+    Real(dp) :: ZAP,AWP
+
+    !Check the LTT value on the first line to ensure Legendre Coeffs format
+    Read(da_unit,'(A33,I11)') trash_c, LCT
+    !values must be in CM frame, check and throw error if they are not
+    If (LCT .NE. 2) Call Output_Message('ERROR:  Cross_Sections: Read_da_sect:  Incorrectly formatted file, LCT=',LCT,kill=.TRUE.)
+    !find the start of the section describing the angular distribution of the neutron on the exit channel
+    Do
+        Read(da_unit,'(2E11.6E1,2I11)') ZAP,AWP,LIP,LAW
+        If (ZAP.EQ.1._dp .AND. AWP.EQ.1._dp .AND. LAW.EQ.2) Exit !this is first line in the correct section
+    End Do
+    If (LAW .EQ. 3) Return  !LAW=3 indicates isotropic distribution, special handling in calling routine
+    !the next 2 lines are always discarded
+    Read(da_unit,*)
+    Read(da_unit,*)
+    !The 6th entry on the next line energy levels in the section
+    Read(da_unit,'(A55,I11)') trash_c,n_p
+    !Skip the next line
+    Read (da_unit,*)
+    !Allocate the data array to the number of provided energy levels
+    Allocate(E_list(1:n_p))
+    Allocate(da_list(1:n_p))
+    !Assume Legendre coeffs description of angular distribution, otherwise throw error and stop
+    da_list%is_legendre = .TRUE.
+    da_list%is_tab = .FALSE.
+    Do i = 1,n_p
+        !The first line in each energy contains the energy in eV in the second position and the number of Legendre coefficients 
+        !in the 5th position
+        Read(da_unit,'(2E11.6E1,4I11)') trash, E_list(i), LANG, trash_i, da_list(i)%n_a
+        If (LANG .NE. 0) Then
+            Call Output_Message('ERROR:  Cross_Sections: Read_da_sect:  Incorrectly formatted da, LANG=',LANG,kill=.TRUE.)
+        End If
+        Allocate(da_list(i)%a(0:da_list(i)%n_a))
+        da_list(i)%a(0) = 0.5_dp
+        Do j = 1,da_list(i)%n_a
+            If (mod(j,6).EQ.0 .OR. j.EQ.da_list(i)%n_a) Then !this is the last entry on a line, read and advance
+                Read(da_unit,'(E11.6E1)', ADVANCE = 'YES') da_list(i)%a(j)
+            Else !read the entry without advancing
+                Read(da_unit,'(E11.6E1)', ADVANCE = 'NO') da_list(i)%a(j)
+            End If
+            !multiply the coeff by (2k+1)/2
+            da_list(i)%a(j) = 0.5_dp * da_list(i)%a(j) * Real(2*j + 1,dp)
+        End Do
+    End Do
+    E_list = E_list / 1000._dp
+End Subroutine Read_da_sect_MF6
 
 Subroutine Read_res_sect(res_unit,res_List)
     Use Kinds, Only: dp
