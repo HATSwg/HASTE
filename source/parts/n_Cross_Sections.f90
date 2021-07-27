@@ -733,11 +733,7 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
             Call Read_res_sect(ENDF_unit,CS%res_cs(i))
             If (v) Then  !write the stored values for this resonance representation
                 Write(v_unit,'(A,I0,A,I0,A)') Trim(isotope_names(i))//' MF=',2,', MT=',151,' (resonance)'
-                !UNDONE
-                !UNDONE
-                !UNDONE
-                !UNDONE
-                !UNDONE Call Write_stored_res(v_unit,CS%res_cs(i))
+                Call Write_stored_res(v_unit,CS%res_cs(i))
             End If
         Else  !no resonance parameters, all interaction cross sections are tabulated in MF=3
             CS%has_res_cs(i) = .FALSE.
@@ -1035,6 +1031,28 @@ Subroutine Write_stored_AD(v_unit,d,n_E_uni,E_uni)
     Write(v_unit,*)
 End Subroutine Write_stored_AD
 
+Subroutine Write_stored_res(v_unit,res)
+    Use Kinds, Only: dp
+    Implicit None
+    Integer, Intent(In) :: v_unit
+    Type(res_sig_Type), Intent(In) :: res
+    Integer :: l,s
+
+    If (res%is_RM) Then
+        Write(v_unit,'(A)') '   Formalism:  Riech-Moore'
+    Else If (res%is_MLBW) Then
+        Write(v_unit,'(A)') '   Formalism:  Multi Level Breit-Wigner'
+    End If
+    Write(v_unit,'(2A26)') '   E-low [keV]            ','   E-high [keV]           '
+    Write(v_unit,'(2A26)') '  ------------------------','  ------------------------'
+    Write(v_unit,'(2ES26.16E3)') res%E_range(1),res%E_range(2)
+    Do l = 1,res%n_L
+        Do s = 1,res%L(l)%n_J
+        End Do
+    End Do
+    Write(v_unit,*)
+End Subroutine Write_stored_res
+
 Subroutine Find_MFMT_end(ENDF_unit)
     Implicit None
     Integer, Intent(In) :: ENDF_unit
@@ -1046,33 +1064,6 @@ Subroutine Find_MFMT_end(ENDF_unit)
         If (line_num .EQ. 99999) Return
     End Do
 End Subroutine Find_MFMT_end
-
-! Subroutine Find_MFMT(ENDF_unit,MFi,MTi)
-!     Use FileIO_Utilities, Only: Output_Message
-!     Implicit None
-!     Integer, Intent(In) :: ENDF_unit
-!     Integer, Intent(In) :: MFi,MTi
-!     Integer :: MF,MT
-!     Character(80) :: trash_c
-!     Integer :: stat
-!     Character(3) :: MFc,MTc
-
-!     !Find this interaction (MFi,MTi) in the ENDF tape
-!     Rewind(ENDF_unit)  !return to the start of the file
-!     Do
-!         Read(ENDF_unit,'(A71,I1,I3)',IOSTAT=stat) trash_c,MF,MT
-!         If (stat .LT. 0) Then
-!             Write(MFc,'(I3)') MFi
-!             Write(MTc,'(I3)') MTi
-!             Call Output_Message('ERROR:  Cross_Sections: Find_MFMT:  Section not found, MF='//MFc//', MT='//MTc,kill=.TRUE.)
-!         End If
-!         If (MF.EQ.MFi .AND. MT.EQ.MTi) Then
-!             Backspace(ENDF_unit)  !go back one line
-!             Exit
-!         End If
-!     End Do
-!     !the next read statement on ENDF_unit will read the first line of MFi, MTi
-! End Subroutine Find_MFMT
 
 Function Find_MFMT(ENDF_unit,MFi,MTi) Result(bingo)
     Implicit None
@@ -1097,46 +1088,6 @@ Function Find_MFMT(ENDF_unit,MFi,MTi) Result(bingo)
     End Do
     !the next read statement on ENDF_unit will read the first line of MFi, MTi
 End Function Find_MFMT
-
-! Subroutine Find_MFMT_multiMF(ENDF_unit,MFi,MTi,MF_found)
-!     Use FileIO_Utilities, Only: Output_Message
-!     Implicit None
-!     Integer, Intent(In) :: ENDF_unit
-!     Integer, Intent(In) :: MFi(:),MTi
-!     Integer, Intent(Out) :: MF_found
-!     Integer :: MF,MT
-!     Character(80) :: trash_c
-!     Integer :: stat
-!     Character(3) :: MFc,MTc
-!     Character(13) :: MFc_list
-!     Integer :: i,j,n
-
-!     !Find this interaction (MFi,MTi) in the ENDF tape
-!     n = Size(MFi)
-!     Do i = 1,n
-!         Rewind(ENDF_unit)  !return to the start of the file
-!         Do
-!             Read(ENDF_unit,'(A71,I1,I3)',IOSTAT=stat) trash_c,MF,MT
-!             If (stat.LT.0 .AND. i.GE.n) Then
-!                 MFc_list = ''
-!                 Do j = 1,n
-!                     Write(MFc,'(I3)') MFi(j)
-!                     If (j .GT. 1) MFc_list = Trim(MFc_list)//','
-!                     MFc_list = Trim(MFc_list)//Trim(MFc)
-!                 End Do
-!                 Write(MTc,'(I3)') MTi
-!                 Call Output_Message( 'ERROR:  Cross_Sections: Find_MFMT:  Section not found, MF='//Trim(MFc_list)//', MT='//MTc, & 
-!                                    & kill=.TRUE.)
-!             End If
-!             If (MF.EQ.MFi(i) .AND. MT.EQ.MTi) Then
-!                 MF_found = MFi(i)
-!                 Backspace(ENDF_unit)  !go back one line
-!                 Return
-!             End If
-!         End Do
-!     End Do
-!     !the next read statement on ENDF_unit will read the first line of MFi, MTi
-! End Subroutine Find_MFMT_multiMF
 
 Subroutine Read_sig_sect(cs_unit,Q,An,E_list,sig_list,Int_list,n_p,n_r)
     Use Kinds, Only: dp
