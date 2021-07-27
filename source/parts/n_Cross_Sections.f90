@@ -212,6 +212,7 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
     Use FileIO_Utilities, Only: slash
     Use FileIO_Utilities, Only: Output_Message
     Use FileIO_Utilities, Only: half_dash_line
+    Use FileIO_Utilities, Only: to_str
     Use Global, Only: neutron_mass
     Implicit None
     Type(CS_Type) :: CS
@@ -253,7 +254,6 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
     Real(dp) :: trash_r
     Logical :: v,first_time
     Character(15) :: v_string
-    Character(3) :: MFc,MTc
 
     NameList /csSetupList1/ n_elements
     NameList /csSetupList2/ el_fractions,n_isotopes
@@ -679,12 +679,12 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
         !!  ABSORPTION INTERACTION CROSS SECTIONS
         Do j = 1,n_abs_modes(i)
             !Find this interaction in the ENDF tape (MF=3, MT=abs_modes(j,i))
-            If (.NOT.Find_MFMT(ENDF_unit,3,abs_modes(j,i))) Then
-                Write(MFc,'(I3)') 3
-                Write(MTc,'(I3)') abs_modes(j,i)
-                Call Output_Message( 'ERROR:  Cross_Sections: Setup_Cross_Sections:  Section not found, MF='//MFc//', MT='//MTc, & 
-                                    & kill=.TRUE. )
-            End If    
+            MF = 3
+            MT = abs_modes(j,i)
+            If (.NOT.Find_MFMT(ENDF_unit,MF,MT)) Then
+                Call Output_Message( 'ERROR:  Cross_Sections: Setup_Cross_Sections:  Section not found, MF='// & 
+                                   & Trim(Adjustl(to_str(MF)))//', MT='//Trim(Adjustl(to_str(MT))) , kill=.TRUE. )
+            End If
             !the next read statement on ENDF_unit will read the first line of MF=3, MT=abs_modes(j,i)
             Call Read_sig_sect(ENDF_unit,Q_scratch,An_scratch,E_scratch,sig_scratch,Interp_scratch,n_p,n_r)
             If (Trim_CS_for_E(n_p,E_scratch,sig_scratch,n_r,Interp_scratch,E_min,E_max)) Then
@@ -712,23 +712,23 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
         Allocate(CS%lev_cs(i)%sig(0:n_inel_lev(i)))
         If (aniso_dist) Allocate(CS%lev_cs(i)%da(0:n_inel_lev(i)))
         !check if resonance cross sections are present
-        If (.NOT.Find_MFMT(ENDF_unit,1,451)) Then
-            Write(MFc,'(I3)') 1
-            Write(MTc,'(I3)') 451
-            Call Output_Message( 'ERROR:  Cross_Sections: Setup_Cross_Sections:  Section not found, MF='//MFc//', MT='//MTc, & 
-                                & kill=.TRUE. )
-        End If    
+        MF = 1
+        MT = 451
+        If (.NOT.Find_MFMT(ENDF_unit,MF,MT)) Then
+            Call Output_Message( 'ERROR:  Cross_Sections: Setup_Cross_Sections:  Section not found, MF='// & 
+                               & Trim(Adjustl(to_str(MF)))//', MT='//Trim(Adjustl(to_str(MT))) , kill=.TRUE. )
+        End If
         !the next read statement on ENDF_unit will read the first line of MF=1, MT=451
         Read(ENDF_unit,'(A22,I11)') trash_c,LRP
         If (LRP .EQ. 1) Then  !resonance parameters are included in the ENDF tape
             CS%has_res_cs(i) = .TRUE.
             !Find this interaction in the ENDF tape (MF=2, MT=151)
-            If (.NOT.Find_MFMT(ENDF_unit,2,151)) Then
-                Write(MFc,'(I3)') 2
-                Write(MTc,'(I3)') 151
-                Call Output_Message( 'ERROR:  Cross_Sections: Setup_Cross_Sections:  Section not found, MF='//MFc//', MT='//MTc, & 
-                                    & kill=.TRUE. )
-            End If    
+            MF = 2
+            MT = 151
+            If (.NOT.Find_MFMT(ENDF_unit,MF,MT)) Then
+                Call Output_Message( 'ERROR:  Cross_Sections: Setup_Cross_Sections:  Section not found, MF='// & 
+                                   & Trim(Adjustl(to_str(MF)))//', MT='//Trim(Adjustl(to_str(MT))) , kill=.TRUE. )
+            End If
             !the next read statement on ENDF_unit will read the first line of MF=2, MT=151
             Call Read_res_sect(ENDF_unit,CS%res_cs(i))
             If (v) Then  !write the stored values for this resonance representation
@@ -744,12 +744,12 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
         End If
         !!  ELASTIC SCATTERING INTERACTION CROSS SECTION
         !Find this interaction in the ENDF tape (MF=3, MT=2)
-        If (.NOT.Find_MFMT(ENDF_unit,3,2)) Then
-            Write(MFc,'(I3)') 3
-            Write(MTc,'(I3)') 2
-            Call Output_Message( 'ERROR:  Cross_Sections: Setup_Cross_Sections:  Section not found, MF='//MFc//', MT='//MTc, & 
-                                & kill=.TRUE. )
-        End If    
+        MF = 3
+        MT = 2
+        If (.NOT.Find_MFMT(ENDF_unit,MF,MT)) Then
+            Call Output_Message( 'ERROR:  Cross_Sections: Setup_Cross_Sections:  Section not found, MF='// & 
+                               & Trim(Adjustl(to_str(MF)))//', MT='//Trim(Adjustl(to_str(MT))) , kill=.TRUE. )
+        End If
         !the next read statement on ENDF_unit will read the first line of MF=3, MT=2
         Call Read_sig_sect(ENDF_unit,Q_scratch,CS%An(i),E_scratch,sig_scratch,Interp_scratch,n_p,n_r)
         If (Trim_CS_for_E(n_p,E_scratch,sig_scratch,n_r,Interp_scratch,E_min,E_max)) Then
@@ -771,12 +771,12 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
         !!  ELASTIC SCATTERING ANGULAR DISTRIBUTION
         If (aniso_dist) Then  !need elastic ang dist file
             !Find this interaction in the ENDF tape (MF=4, MT=2)
-            If (.NOT.Find_MFMT(ENDF_unit,4,2)) Then
-                Write(MFc,'(I3)') 4
-                Write(MTc,'(I3)') 2
-                Call Output_Message( 'ERROR:  Cross_Sections: Setup_Cross_Sections:  Section not found, MF='//MFc//', MT='//MTc, & 
-                                    & kill=.TRUE. )
-            End If    
+            MF = 4
+            MT = 2
+            If (.NOT.Find_MFMT(ENDF_unit,MF,MT)) Then
+                Call Output_Message( 'ERROR:  Cross_Sections: Setup_Cross_Sections:  Section not found, MF='// & 
+                                   & Trim(Adjustl(to_str(MF)))//', MT='//Trim(Adjustl(to_str(MT))) , kill=.TRUE. )
+            End If
             !the next read statement on ENDF_unit will read the first line of MF=4, MT=2
             Call Read_da_sect_MF4(ENDF_unit,E_scratch,Ang_dist_scratch,n_p,LTT)
             If (LTT .EQ. 0) Then
@@ -820,12 +820,12 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
         Do j = 1,n_inel_lev(i)
             !!  INELASTIC SCATTER INTERACTION CROSS SECTION
             !Find this interaction in the ENDF tape (MF=3, MT=50+j)
-            If (.NOT.Find_MFMT(ENDF_unit,3,50+j)) Then
-                Write(MFc,'(I3)') 3
-                Write(MTc,'(I3)') 50+j
-                Call Output_Message( 'ERROR:  Cross_Sections: Setup_Cross_Sections:  Section not found, MF='//MFc//', MT='//MTc, & 
-                                    & kill=.TRUE. )
-            End If    
+            MF = 3
+            MT = 50 + j
+            If (.NOT.Find_MFMT(ENDF_unit,MF,MT)) Then
+                Call Output_Message( 'ERROR:  Cross_Sections: Setup_Cross_Sections:  Section not found, MF='// & 
+                                   & Trim(Adjustl(to_str(MF)))//', MT='//Trim(Adjustl(to_str(MT))) , kill=.TRUE. )
+            End If
             !the next read statement on ENDF_unit will read the first line of MF=3, MT=50+j
             Call Read_sig_sect(ENDF_unit,Q_scratch,An_scratch,E_scratch,sig_scratch,Interp_scratch,n_p,n_r)
             If (Trim_CS_for_E(n_p,E_scratch,sig_scratch,n_r,Interp_scratch,E_min,E_max)) Then
@@ -848,17 +848,14 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
             !!  INELASTIC SCATTER ANGULAR DISTRIBUTION
             If (aniso_dist) Then  !need inelastic level ang dist files
                 !Find this interaction in the ENDF tape (MF=4 or MF=6, MT=50+j)
-                If (.NOT.Find_MFMT(ENDF_unit,4,50+j)) Then
-                    If (.NOT.Find_MFMT(ENDF_unit,6,50+j)) Then
-                        MFc = '4,6'
-                        Write(MTc,'(I3)') 50+j
-                        Call Output_Message( 'ERROR:  Cross_Sections: Setup_Cross_Sections:  Section not found, MF='//MFc// & 
-                                             ', MT='//MTc,kill=.TRUE. )
-                    Else
-                        MF = 6
+                MF = 4
+                MT = 50 + j
+                If (.NOT.Find_MFMT(ENDF_unit,MF,MT)) Then
+                    MF = 6
+                    If (.NOT.Find_MFMT(ENDF_unit,MF,MT)) Then
+                        Call Output_Message( 'ERROR:  Cross_Sections: Setup_Cross_Sections:  Section not found, MF='// & 
+                                           & '4,6'//', MT='//Trim(Adjustl(to_str(MT))) , kill=.TRUE. )
                     End If
-                Else
-                    MF = 4
                 End If    
                 LTT = -HUGE(LTT)
                 LAW = -HUGE(LAW)
