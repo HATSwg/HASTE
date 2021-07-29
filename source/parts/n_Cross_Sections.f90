@@ -883,7 +883,7 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
                     Deallocate(E_scratch,Ang_dist_scratch)
                 End If
                 If (v) Then  !write the stored values for this inelastic scatter angular distribution
-                    Write(v_unit,'(A,I0,A,I0,A)') Trim(isotope_names(i))//' MF=',MF,', MT=',50+j,' (da, inelastic)'
+                    Write(v_unit,'(A,I0,A,I0,A)') Trim(isotope_names(i))//' MF=',MF,', MT=',MT,' (da, inelastic)'
                     Call Write_stored_AD(v_unit,CS%lev_cs(i)%da(j),CS%n_E_uni,CS%E_uni)
                 End If
                 If (LTT.EQ.1 .OR. LAW.EQ.3) Then
@@ -1515,173 +1515,58 @@ Subroutine Read_res_sect(res_unit,res_List)
                 End If
             End Do
             !precompute shift and penetrability factors at each stored resonanace
-            res_list%L(l)%J(J)%ErG(:,d-1) = ShiftFact( l , res_list%k0*Sqrt( Abs(res_list%L(l)%J(J)%ErG(:,1)) ) )
-            res_list%L(l)%J(J)%ErG(:,d) = PenetFact( l , res_list%k0*Sqrt( Abs(res_list%L(l)%J(J)%ErG(:,1)) ) )
+            Do i = 1,res_list%L(l)%J(J)%n_r
+                Call PSphi( l-1 , res_list%k0*Sqrt( Abs(res_list%L(l)%J(J)%ErG(i,1)) ) , & 
+                          & res_list%L(l)%J(J)%ErG(i,d) , res_list%L(l)%J(J)%ErG(i,d-1) )
+            End Do
         End Do
     End Do
 End Subroutine Read_res_sect
 
-Pure Function SPden2(rho_sq) Result(SPden)
-!returns the demominator for computing SHIFT and PENETRABILITY factors at the 2nd level
+Recursive Pure Subroutine PSphi(l,rho,P,S,phi)
     Use Kinds, Only: dp
     Implicit None
-    Real(dp) :: SPden
-    Real(dp), Intent(In) :: rho_sq
-    
-    SPden = 1._dp + rho_sq
-End Function SPden2
-
-Pure Function SPden3(rho_sq) Result(SPden)
-!returns the demominator for computing SHIFT and PENETRABILITY factors at the 3rd level
-    Use Kinds, Only: dp
-    Implicit None
-    Real(dp) :: SPden
-    Real(dp), Intent(In) :: rho_sq
-    
-    SPden = 9._dp + rho_sq*(3._dp + rho_sq)
-End Function SPden3
-
-Pure Function SPden4(rho_sq) Result(SPden)
-!returns the demominator for computing SHIFT and PENETRABILITY factors at the 4th level
-    Use Kinds, Only: dp
-    Implicit None
-    Real(dp) :: SPden
-    Real(dp), Intent(In) :: rho_sq
-    
-    SPden = 225._dp + rho_sq*(45._dp + rho_sq*(6._dp + rho_sq))
-End Function SPden4
-
-Pure Function SPden5(rho_sq) Result(SPden)
-!returns the demominator for computing SHIFT and PENETRABILITY factors at the 5th level
-    Use Kinds, Only: dp
-    Implicit None
-    Real(dp) :: SPden
-    Real(dp), Intent(In) :: rho_sq
-    
-    SPden = 11025._dp + rho_sq*(1575._dp + rho_sq*(135._dp + rho_sq*(10._dp + rho_sq)))
-End Function SPden5
-
-Pure Function Snum3(rho_sq) Result(Snum)
-!returns the numerator for computing SHIFT factor at the 3rd level
-    Use Kinds, Only: dp
-    Implicit None
-    Real(dp) :: Snum
-    Real(dp), Intent(In) :: rho_sq
-    
-    Snum = -(18._dp + 3._dp*rho_sq)
-End Function Snum3
-
-Pure Function Snum4(rho_sq) Result(Snum)
-!returns the numerator for computing SHIFT factor at the 4th level
-    Use Kinds, Only: dp
-    Implicit None
-    Real(dp) :: Snum
-    Real(dp), Intent(In) :: rho_sq
-    
-    Snum = -(675._dp + rho_sq*(90._dp + 6._dp*rho_sq))
-End Function Snum4
-
-Pure Function Snum5(rho_sq) Result(Snum)
-!returns the numerator for computing SHIFT factor at the 5th level
-    Use Kinds, Only: dp
-    Implicit None
-    Real(dp) :: Snum
-    Real(dp), Intent(In) :: rho_sq
-    
-    Snum = -(44100._dp + rho_sq*(4725._dp + rho_sq*(270._dp + 10._dp*rho_sq)))
-End Function Snum5
-
-Elemental Function ShiftFact(l,rho) Result(shift)
-    Use Kinds, Only: dp
-    Implicit None
-    Real(dp) :: shift
     Integer, Intent(In) :: l
     Real(dp), Intent(In) :: rho
-    Real(dp) :: rho_sq
-    
-    Select Case (l)
-        Case (1)
-            shift = 0._dp
-        Case (2)
-            rho_sq = rho**2
-            shift = -1._dp / SPden2(rho_sq)
-        Case (3)
-            rho_sq = rho**2
-            shift = Snum3(rho_sq) / SPden3(rho_sq)
-        Case (4)
-            rho_sq = rho**2
-            shift = Snum4(rho_sq) / SPden4(rho_sq)
-        Case (5)
-            rho_sq = rho**2
-            shift = Snum5(rho_sq) / SPden5(rho_sq)
-    End Select
-End Function ShiftFact
+    Real(dp), Intent(Out) :: P
+    Real(dp), Intent(Out) :: S
+    Real(dp), Intent(Out), Optional :: phi
+    Real(dp) :: s0,p0,phi0
+    Real(dp) :: c
 
-Pure Function Pnum2(rho,rho_sq) Result(Pnum)
-!returns the numerator for computing PENETRABILITY factor at the 2nd level
+    If (l .GT. 0) Then
+        If (Present(phi)) Then
+            Call PSphi(l-1,rho,p0,s0,phi0)
+        Else
+            Call PSphi(l-1,rho,p0,s0)
+        End If
+        s0 = Real(l,dp) - s0
+        c = rho**2 / ( s0**2 + p0**2 )
+        P = c * p0
+        S = c * s0 - Real(l,dp)
+        If (Present(phi)) phi = phi0 - ATAN( p0 / s0 )
+    Else
+        p = rho
+        s = 0._dp
+        If (Present(phi)) phi = rho
+    End If
+End Subroutine PSphi
+
+Pure Function Phi_hard(l,rho) Result(phi)
     Use Kinds, Only: dp
     Implicit None
-    Real(dp) :: Pnum
-    Real(dp), Intent(In) :: rho,rho_sq
-    
-    Pnum = rho * rho_sq
-End Function Pnum2
-
-Pure Function Pnum3(rho,rho_sq) Result(Pnum)
-!returns the numerator for computing PENETRABILITY factor at the 3rd level
-    Use Kinds, Only: dp
-    Implicit None
-    Real(dp) :: Pnum
-    Real(dp), Intent(In) :: rho,rho_sq
-    
-    Pnum = rho * rho_sq**2
-End Function Pnum3
-
-Pure Function Pnum4(rho,rho_sq) Result(Pnum)
-!returns the numerator for computing PENETRABILITY factor at the 4th level
-    Use Kinds, Only: dp
-    Implicit None
-    Real(dp) :: Pnum
-    Real(dp), Intent(In) :: rho,rho_sq
-    
-    Pnum = rho * rho_sq**3
-End Function Pnum4
-
-Pure Function Pnum5(rho,rho_sq) Result(Pnum)
-!returns the numerator for computing PENETRABILITY factor at the 5th level
-    Use Kinds, Only: dp
-    Implicit None
-    Real(dp) :: Pnum
-    Real(dp), Intent(In) :: rho,rho_sq
-    
-    Pnum = rho * rho_sq**4
-End Function Pnum5
-
-Elemental Function PenetFact(l,rho) Result(penet)
-    Use Kinds, Only: dp
-    Implicit None
-    Real(dp) :: penet
+    Real(dp) :: phi
     Integer, Intent(In) :: l
     Real(dp), Intent(In) :: rho
-    Real(dp) :: rho_sq
-    
-    Select Case (l)
-        Case (1)
-            penet = rho
-        Case (2)
-            rho_sq = rho**2
-            penet = Pnum2(rho,rho_sq) / SPden2(rho_sq)
-        Case (3)
-            rho_sq = rho**2
-            penet = Pnum3(rho,rho_sq) / SPden3(rho_sq)
-        Case (4)
-            rho_sq = rho**2
-            penet = Pnum4(rho,rho_sq) / SPden4(rho_sq)
-        Case (5)
-            rho_sq = rho**2
-            penet = Pnum5(rho,rho_sq) / SPden5(rho_sq)
-    End Select
-End Function PenetFact
+    Real(dp) :: p0,s0,phi0
+
+    If (l .GT. 0) Then
+        Call PSphi(l-1,rho,p0,s0,phi0)
+        phi = phi0 - ATAN( p0 / (Real(l,dp) - s0) )
+    Else
+        phi = rho
+    End If
+End Function Phi_hard
 
 Function Trim_CS_for_E(n_p,E_list,CS_list,n_r,Int_list,E_min,E_max) Result(bingo)
     Use Kinds, Only: dp
@@ -2209,8 +2094,8 @@ Pure Subroutine sig_Resonance(r,E,sT,sS)
     E_eV = 1000._dp * E !local energy units in eV
     k = r%k0 * Sqrt(E_eV)
     Do l = 1,r%n_L  !sum over levels (l)
-        Call phi_shift_penet(l,k*r%a(1,l),k*r%a(2,l),two_phi,S,P)
-        two_phi = 2._dp * two_phi
+        Call PSphi( l-1 , k*r%a(1,l) , P , S )
+        two_phi = 2._dp * Phi_hard( l-1 , k*r%a(2,l) )  !This WASTES effort for NAPS=1 (because rho and rho-hat are equal)
         If (r%is_RM) Then !Reich-Moore formalism
             Do J = 1,r%L(l)%n_J  !sum over spins (J)
                 !compute the R-function
@@ -2262,50 +2147,6 @@ Pure Subroutine sig_Resonance(r,E,sT,sS)
         sT = sT * Pi / k**2 + sS
     End If
 End Subroutine sig_Resonance
-
-Pure Subroutine phi_shift_penet(l,rho,rho_hat,phi,shift,penet)
-    Use Kinds, Only: dp
-    Implicit None
-    Integer, Intent(In) :: l
-    Real(dp), Intent(In) :: rho,rho_hat
-    Real(dp), Intent(Out) :: phi,shift,penet
-    Real(dp) :: rho_sq,rho_hat_sq
-    Real(dp) :: c
-    
-    Select Case (l)
-        Case (1)
-            phi = rho_hat
-            shift = 0._dp
-            penet = rho
-        Case (2)
-            phi = rho_hat - ATAN(rho_hat)
-            rho_sq = rho**2
-            c = 1._dp / SPden2(rho_sq)
-            shift = -c
-            penet = Pnum2(rho,rho_sq) * c
-        Case (3)
-            rho_hat_sq = rho_hat**2
-            phi = rho_hat - ATAN(3._dp * rho_hat / (3._dp - rho_hat_sq))
-            rho_sq = rho**2
-            c = 1._dp / SPden3(rho_sq)
-            shift = Snum3(rho_sq) * c
-            penet = Pnum3(rho,rho_sq) * c
-        Case (4)
-            rho_hat_sq = rho_hat**2
-            phi = rho_hat - ATAN(rho_hat * (15._dp - rho_hat_sq) / (15._dp - 6._dp * rho_hat_sq))
-            rho_sq = rho**2
-            c = 1._dp / SPden4(rho_sq)
-            shift = Snum4(rho_sq) * c
-            penet = Pnum4(rho,rho_sq) * c
-        Case (5)
-            rho_hat_sq = rho_hat**2
-            phi = rho_hat - ATAN(rho_hat * (105._dp - 10._dp*rho_hat_sq) / (105._dp - rho_hat_sq * (45._dp + rho_hat_sq)))
-            rho_sq = rho**2
-            c = 1._dp / SPden5(rho_sq)
-            shift = Snum5(rho_sq) * c
-            penet = Pnum5(rho,rho_sq) * c
-    End Select
-End Subroutine phi_shift_penet
 
 Pure Function sig_Composite(E,n_E,E_list,lnE_list,E_index,n1,n2,t_list,sig_list) Result(sig)
     Use Kinds, Only: dp
