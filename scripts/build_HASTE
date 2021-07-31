@@ -58,7 +58,7 @@ SRC_PATH="../source/"
 BLD_PATH="../build/"
 FNAME="HASTE_DRIVER"
 echo "Compiling and linking HASTE..."
-$COMP_NAME $GFORT_FLAGS -o ${BLD_PATH}HASTE${EXT} ${SRC_PATH}${FNAME}.f90 $OBJ_FILES $LIB_FLAGS
+$COMP_NAME $FORT_FLAGS -o ${BLD_PATH}HASTE${EXT} ${SRC_PATH}${FNAME}.f90 $OBJ_FILES $LIB_FLAGS
 echo "Copying resource files..."
 rm -fr ${BLD_PATH}Resources
 cp -r ../source/resources ${BLD_PATH}Resources

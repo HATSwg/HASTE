@@ -33,7 +33,7 @@ FNAME="Diverge_approx"; . ${SCR_PATH}compile_it
 SRC_PATH="../testing/prevTrajectory/"
 FNAME="testPrevTrajectory"
 echo "Compiling and linking testPrevTrajectory..."
-$COMP_NAME $GFORT_FLAGS -o ${SRC_PATH}${FNAME}${EXT} ${SRC_PATH}${FNAME}.f90 $OBJ_FILES
+$COMP_NAME $FORT_FLAGS -o ${SRC_PATH}${FNAME}${EXT} ${SRC_PATH}${FNAME}.f90 $OBJ_FILES
 
 #RUN THE TEST PROGRAM
 echo "Running..."

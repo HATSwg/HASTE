@@ -7,7 +7,7 @@
 SRC_PATH="../testing/n_CS/"
 FNAME="testCS"
 echo "Compiling and linking testCS..."
-$COMP_NAME $GFORT_FLAGS -o ${SRC_PATH}${FNAME}${EXT} ${SRC_PATH}${FNAME}.f90 $OBJ_FILES
+$COMP_NAME $FORT_FLAGS -o ${SRC_PATH}${FNAME}${EXT} ${SRC_PATH}${FNAME}.f90 $OBJ_FILES
 echo "Copying resource files..."
 rm -fr ${SRC_PATH}Resources
 cp -r ../source/resources ${SRC_PATH}Resources

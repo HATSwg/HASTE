@@ -15,7 +15,7 @@ FNAME="Kinds"; . ${SCR_PATH}compile_it
 SRC_PATH="../testing/"
 FNAME="testDirGridWt"
 echo "Compiling and linking testDirGridWt..."
-$COMP_NAME $GFORT_FLAGS -o ${SRC_PATH}${FNAME}${EXT} ${SRC_PATH}${FNAME}.f90 $OBJ_FILES
+$COMP_NAME $FORT_FLAGS -o ${SRC_PATH}${FNAME}${EXT} ${SRC_PATH}${FNAME}.f90 $OBJ_FILES
 
 #RUN THE TEST PROGRAM
 echo "Running..."
