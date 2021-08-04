@@ -65,30 +65,27 @@ Module n_Cross_Sections
         Type(sig_Type), Allocatable :: sig(:)  !has dim 1:n_modes, cross sections for each absorption mode
     End Type
 
-    Type ::  res_sig_spin_Type
-        Integer :: n_r  !number of resonant energies in this spin
-        Real(dp), Allocatable :: ErG(:,:)  !For Riech-Moore formalism: has dimension 1:n_r and 1:5, dim 2 is 1=Er[keV], 
-                                           !    2=neutron width, 3=radiation width
-                                           !For MLBW formalism: has dimension 1:n_r and 1:6, dim 2 is 1=Er[keV], 2=total width, 
-                                           !    3=neutron width, 4=radiation width
-    End Type
-
     Type ::  res_sig_level_Type
-        Integer :: n_J  !number of resonant spins in this level
-        Real(dp), Allocatable :: gJ(:)  !total angular momentum for each spin group
-        Logical, Allocatable :: dJ(:)  !second channel spin correction for each spin group
-        Type(res_sig_spin_Type), Allocatable :: J(:)  !has dimension 1:n_J, resonance parameters for each spin group
+        Integer :: n_r  !number of resonance energies in this level
+        Real(dp) :: a  ![1E-12 cm] channel radius
+        Real(dp) :: ap ![1E-12 cm] scattering radius
+        Real(dp), Allocatable :: ErgG(:,:)  !Has dimension 1:n_r and 1:b where b depends on the formalism used to define resonances
+                                            !For all formalisms, in dim 2, 1=Er[keV] and 2=statistical factor gJ
+                                            !For Riech-Moore formalism:  b=6, in dim 2, 3=neutron width, 4=radiation width
+                                            !For BW formalisms: b=7, in dim 2, 3=total width, 4=neutron width, 5=radiation width
+                                            !For all formalisms, in dim 2, the last 2 columns are shift and penetrability at Er
     End Type
 
     Type :: res_sig_Type
         Logical :: is_RM  !indicates use of Riech-Moore formalism for resonance representation
-        Logical :: is_MLBW  !indicates use of MLBW formaism for resonance representation
-        !Other formalisms (SLBW, Adler-Adler, Limited-R) are not supported at this time
+        Logical :: is_BW  !indicates use of one of the Breit-Wigner (BW) formalisms for resonance representation
+            Logical :: is_SLBW  !indicates use of Single Level BW (SLBW) for resonance representation
+            Logical :: is_MLBW  !indicates use of Mulit Level BW (MLBW) for resonance representation
+        !Other formalisms (Adler-Adler, Limited-R) are not supported at this time
         Real(dp) :: E_range(1:2)  ![keV]  low and high energy bounds over which resonant contribution is computed
-        Real(dp) :: k0  !=2.196771E-3_dp*(An/(An+1._dp)), gives k (neutron wave #) when multiplied by Sqrt(E[eV])
+        Real(dp) :: k0  !gives k (neutron wave #) when multiplied by Sqrt(E[eV])
         Integer :: n_L  !number of levels in which resonances are grouped
-        Real(dp), Allocatable :: a(:,:)  !has dimension 1:2,1:n_L, dim 1, 1=channel radius and 2=scattering radius
-        Type(res_sig_level_Type), Allocatable :: L(:)   !has dimension 1:n_L, resonance parameters for each level group
+        Type(res_sig_level_Type), Allocatable :: L(:)   !has dimension 1:n_L, resonance parameters for each level
     End Type
 
     Type :: CS_Type
@@ -1033,18 +1030,37 @@ Subroutine Write_stored_res(v_unit,res)
     Implicit None
     Integer, Intent(In) :: v_unit
     Type(res_sig_Type), Intent(In) :: res
-    Integer :: l,s
+    Integer :: l,r
 
-    If (res%is_RM) Then
-        Write(v_unit,'(A)') '   Formalism:  Riech-Moore'
-    Else If (res%is_MLBW) Then
-        Write(v_unit,'(A)') '   Formalism:  Multi Level Breit-Wigner'
-    End If
     Write(v_unit,'(2A26)') '   E-low [keV]            ','   E-high [keV]           '
     Write(v_unit,'(2A26)') '  ------------------------','  ------------------------'
     Write(v_unit,'(2ES26.16E3)') res%E_range(1),res%E_range(2)
+    If (res%is_RM) Then
+        Write(v_unit,'(A)') '   Formalism:  Riech-Moore'
+    Else If (res%is_SLBW) Then
+        Write(v_unit,'(A)') '   Formalism:  Single Level Breit-Wigner'
+    Else If (res%is_MLBW) Then
+        Write(v_unit,'(A)') '   Formalism:  Multi Level Breit-Wigner'
+    End If
     Do l = 1,res%n_L
-        Do s = 1,res%L(l)%n_J
+        Write(v_unit,'(A,I0,2(A,ES26.16E3))') '  Level ',l,' -- Channel Rad [1E-12cm]:',res%L(l)%a, & 
+                                                     & ', Scattering Rad [1E-12cm]:',res%L(l)%ap
+        Write(v_unit,'(A4,2A26)',ADVANCE='NO') '','   E-res [eV]             ','   Statistical Factor     '
+        If (res%is_RM) Then
+            Write(v_unit,'(2A26)') '   Neutron Width          ','   Radiation Width        '
+            Write(v_unit,'(A4,4A26)') '','  ------------------------','  ------------------------', & 
+                                    & '  ------------------------','  ------------------------'
+        Else If (res%is_BW) Then
+            Write(v_unit,'(3A26)') '   Total Width            ','   Neutron Width          ','   Radiation Width        '
+            Write(v_unit,'(A4,5A26)') '','  ------------------------','  ------------------------', & 
+                                    & '  ------------------------','  ------------------------','  ------------------------'
+        End If
+        Do r = 1,res%L(l)%n_r
+            If (res%is_RM) Then
+                Write(v_unit,'(A4,6ES26.16E3)') '',res%L(l)%ErgG(r,:)
+            Else If (res%is_MLBW) Then
+                Write(v_unit,'(A4,7ES26.16E3)') '',res%L(l)%ErgG(r,:)
+            End If
         End Do
     End Do
     Write(v_unit,*)
@@ -1305,7 +1321,6 @@ Subroutine Read_da_sect_MF6(da_unit,E_list,da_list,n_p,LAW)
     Real(dp) :: trash
     Integer :: trash_i
     Character(80) :: trash_c
-    Integer :: n_a,n_a_lines,n_skipped_lines
     Integer :: LCT,LIP,LANG
     Real(dp) :: ZAP,AWP
 
@@ -1357,26 +1372,22 @@ End Subroutine Read_da_sect_MF6
 Subroutine Read_res_sect(res_unit,res_List)
     Use Kinds, Only: dp
     Use FileIO_Utilities, Only: Output_Message
-    !Use Global, Only: mn => neutron_mass
-    !Use Global, Only: h_bar => h_bar_Planck
+    Use Global, Only: mn => neutron_mass ![kg]
+    Use Global, Only: h_bar => h_bar_Planck ![J*s]
+    Use Global, Only: keV_per_Joule ![keV/J]
     Use Sorting, Only: Union_Sort
     Implicit None
     Integer, Intent(In) :: res_unit
     Type(res_sig_Type), Intent(Out) :: res_list
 
-    Integer :: i,J,k,l,r,d
+    Integer :: J,l,r,d
     Real(dp) :: trash
     Integer :: LRF,NRO,NAPS
-    Real(dp) :: SPI,AP
-    Integer :: nL,nR,nJ
+    Real(dp) :: SPI,AP0,AP
+    Integer :: nL,nR
     Real(dp) :: AWRI
-    Real(dp), Allocatable :: res_scratch(:,:),Js(:)
-    Real(dp), Allocatable :: J_min(:),J_max(:)
-    Real(dp) :: s_min,s_max,si
-    Real(dp) :: Jsec
-    Integer :: nS,nJsec
-    Integer :: nRj
     Real(dp), Parameter :: one_third = 1._dp / 3._dp
+    Logical :: found_fission
 
     !check the LRF value on the third line to ensure MLBW or Reich-Moore format
     !check the NRO value on the third line to ensure energy independent scattering radius
@@ -1384,10 +1395,18 @@ Subroutine Read_res_sect(res_unit,res_List)
     Read(res_unit,*)
     Read(res_unit,'(3E11.6E1,3I11)') res_list%E_range(1), res_list%E_range(2), trash, LRF, NRO, NAPS
     res_list%E_range = res_list%E_range / 1000._dp  !convert to keV
-    If (LRF .EQ. 2) Then  !MLBW formalism
-        res_list%is_MLBW = .TRUE.
+    If (LRF.EQ.1 .OR. LRF.EQ.2) Then  !BW formalism
         res_list%is_RM = .FALSE.
+        If (LRF .EQ. 1) Then  !SLBW
+            res_list%is_SLBW = .TRUE.
+            res_list%is_MLBW = .FALSE.
+        Else  !MLBW
+            res_list%is_SLBW = .FALSE.
+            res_list%is_MLBW = .TRUE.
+        End If
     Else If (LRF .EQ. 3) Then  !Reich-Moore formalism
+        res_list%is_BW = .FALSE.
+        res_list%is_SLBW = .FALSE.
         res_list%is_MLBW = .FALSE.
         res_list%is_RM = .TRUE.
     Else  !this formalism is not supported
@@ -1397,128 +1416,53 @@ Subroutine Read_res_sect(res_unit,res_List)
         Call Output_Message('ERROR:  Cross_Sections: Read_res_sect:  Incorrectly formatted file, NRO=',NRO,kill=.TRUE.)
     End If
     !read AP and n_L from the next line
-    Read(res_unit,'(4E11.6E1,I11)') SPI, AP, trash, trash, nL
+    Read(res_unit,'(4E11.6E1,I11)') SPI, AP0, trash, trash, nL
     !read AWRI from next line
     Read(res_unit,'(E11.6E1)') AWRI
-    !compute k0
-    res_List%k0 = 2.196771E-3_dp * (AWRI / (AWRI + 1._dp)) !(Sqrt(2._dp*mn) / h_bar) * (AWRI / (AWRI + 1._dp))  
+    !compute k0 (when multiplied by Sqrt(E[eV]), gives neutron wave number)
+    res_List%k0 = (Sqrt(2._dp*mn) / h_bar) * (AWRI / (AWRI + 1._dp)) * Sqrt(1._dp / (1000._dp*keV_per_Joule))
     Backspace(res_unit)  !that line will need to be read again
     !allocate levels
     res_List%n_L = nL
-    Allocate(res_List%a(1:2,1:nL))
-    res_List%a = AP  !default value
-    If (NAPS .EQ. 0) res_list%a(1,:) = 0.08_dp + 0.123_dp * AWRI**one_third !0.08_dp + 0.123_dp * (mn * AWRI)**one_third
     Allocate(res_List%L(1:nL))
     Do l = 1,nL
+        res_List%L(l)%ap = AP0 * 1.E-14_dp  !convert to meters, default value
+        If (NAPS .EQ. 0) Then
+            res_list%L(l)%a = (0.08_dp + 0.123_dp * AWRI**one_third) * 1.E-14_dp  !convert to meters
+        Else
+            res_list%L(l)%a = AP0 * 1.E-14_dp  !convert to meters
+        End If
         !read AWRI, APL and number of resonances in first layer from next line
         Read(res_unit,'(5E11.6E1,I11)') AWRI, AP, trash, trash, trash, nR
-        If (AP .NE. 0._dp) res_List%a(2,l) = AP  !level specific scattering radius
-        !Allocate a scratch array
-        If (l .GT. 1) Then
-            Deallocate(res_scratch)
-            Deallocate(Js)
+        res_list%L(l)%n_r = nR
+        If (AP .NE. 0._dp) res_List%L(l)%ap = AP * 1.E-14_dp  !convert to meters, level specific scattering radius
+        If (res_list%is_RM) Then
+            d = 6
+        Else If (res_list%is_BW) Then
+            d = 7
         End If
-        Allocate(res_scratch(1:nR,1:6))
-        res_scratch = -1._dp
-        Allocate(Js(1:nR))
-        Js = -1._dp
+        Allocate(res_list%L(l)%ErgG(1:nR,1:d))
+        res_list%L(l)%ErgG = 0._dp
         !read resonance parameters for this level
-        Do r = 1,nR
-            Read(res_unit,'(6E11.6E1)') res_scratch(r,1), & 
-                                      & res_scratch(r,2), & 
-                                      & res_scratch(r,3), & 
-                                      & res_scratch(r,4), & 
-                                      & res_scratch(r,5), & 
-                                      & res_scratch(r,6)
+        Do r = 1,res_list%L(l)%n_r
+            Read(res_unit,'(6E11.6E1)') res_list%L(l)%ErgG(r,1), res_list%L(l)%ErgG(r,2), res_list%L(l)%ErgG(r,3), & 
+                                      & res_list%L(l)%ErgG(r,4), res_list%L(l)%ErgG(r,5), res_list%L(l)%ErgG(r,6)
         End Do
         !check for fission resonances
-        If (res_list%is_MLBW) Then
-            If (Any(res_scratch(:,6).NE.0._dp)) Call Output_Message('ERROR:  Cross_Sections: Read_res_sect:  Dude, a fissionable &
-                                                                    &atmosphere is just ridiculous. ',kill=.TRUE.)
-        Else !res_list%is_RM
-            If (Any(res_scratch(:,5:6).NE.0._dp)) Call Output_Message('ERROR:  Cross_Sections: Read_res_sect:  Dude, a fissionable &
-                                                                      &atmosphere is just ridiculous. ',kill=.TRUE.)
+        found_fission = .FALSE.
+        If (res_list%is_BW) Then
+            If (Any(res_list%L(l)%ErgG(:,6).NE.0._dp)) found_fission = .TRUE.
+        Else If (res_list%is_RM) Then
+            If (Any(res_list%L(l)%ErgG(:,5:6).NE.0._dp)) found_fission = .TRUE.
         End If
-        !count unique spin values
-        Js = res_scratch(:,2)
-        If (nR .GT. 1) Then
-            Call Union_Sort(Js,nJ)
-        Else
-            nJ = 1
-        End If
-        !Allocate and fill spin groups for this level
-        res_list%L(l)%n_J = nJ
-        !total angular momentum
-        Allocate(res_list%L(l)%gJ(1:nJ))
-        res_list%L(l)%gJ = 0.5_dp * (2._dp * Js(1:nJ) + 1._dp) / (2._dp * SPI + 1._dp)
-        !second channel spin flags
-        Allocate(res_list%L(l)%dJ(1:nJ))
-        res_list%L(l)%dJ = .FALSE.
-        s_min = Abs(SPI - 0.5_dp)
-        s_max = SPI + 0.5_dp
-        nS = 1
-        Do
-            If (s_min + Real(nS,dp) .GE. s_max) Exit
-            nS = nS + 1
-        End Do
-        If (nS .GT. 1) Then !second channel flags must be set
-            Allocate(J_min(1:nS))
-            Allocate(J_max(1:nS))
-            Do i = 1,nS
-                si = s_min + Real(i,dp)
-                J_min(i) = Abs(Real(l,dp) - si)
-                J_max(i) = Real(l,dp) + si
-            End Do
-            If (MaxVal(J_min).LE.MinVal(J_max)) Then !there is at least one second channel contribution
-                nJsec = 1
-                Do
-                    If (MaxVal(J_min) + Real(nJsec,dp) .GE. MinVal(J_max)) Exit
-                    nJsec = nJsec + 1
-                End Do
-                Do i = 0,nJsec
-                    Jsec = MaxVal(J_min) + Real(nJsec,dp)
-                    Do J = 1,nJ
-                        If (Jsec .EQ. Js(J)) res_list%L(l)%dJ(J) = .TRUE.
-                    End Do
-                End Do
-            End If
-            Deallocate(J_min)
-            Deallocate(J_max)
-        End If
-        !spin-grouped resonance lists
-        Allocate(res_list%L(l)%J(1:nJ))
-        Do J = 1,nJ
-            !count number of resonance parameters for this spin
-            nRj = 0
-            Do i = 1,nR
-                If (res_scratch(i,2) .EQ. Js(J)) nRj = nRj + 1
-            End Do
-            res_list%L(l)%J(J)%n_r = nRj
-            If (res_list%is_MLBW) Then
-                d = 6
-            Else !res_list%is_RM
-                d = 5
-            End If
-            Allocate(res_list%L(l)%J(J)%ErG(1:nRj,1:d))
-            res_list%L(l)%J(J)%ErG(1:nRj,1:d) = 0._dp
-            k = 1
-            Do i = 1,nR
-                If (res_scratch(i,2) .EQ. Js(J)) Then
-                    !NOTE: Resonance parameters are stored with energy in eV (NOT keV like the rest of the cross sections)
-                    res_list%L(l)%J(J)%ErG(k,1) = res_scratch(i,1)
-                    res_list%L(l)%J(J)%ErG(k,2) = res_scratch(i,3)
-                    res_list%L(l)%J(J)%ErG(k,3) = res_scratch(i,4)
-                    If (res_list%is_MLBW) res_list%L(l)%J(J)%ErG(k,4) = res_scratch(i,5)
-                    res_scratch(i,2) = 0._dp
-                    If (k .GE. nRj) Exit
-                    k = k + 1
-                End If
-            End Do
-            !precompute shift and penetrability factors at each stored resonanace
-            Do i = 1,res_list%L(l)%J(J)%n_r
-                Call PSphi( l-1 , res_list%k0*Sqrt( Abs(res_list%L(l)%J(J)%ErG(i,1)) ) , & 
-                          & res_list%L(l)%J(J)%ErG(i,d) , res_list%L(l)%J(J)%ErG(i,d-1) )
-            End Do
+        If (found_fission) Call Output_Message( 'ERROR:  Cross_Sections: Read_res_sect:  Dude, a fissionable '// &
+                                              & 'atmosphere is just ridiculous. ',kill=.TRUE.)
+        !convert resonance spin (aJ, 2nd column) to statistical factor gJ
+        res_list%L(l)%ErgG(:,2) = 0.5_dp * (2._dp * res_list%L(l)%ErgG(:,2) + 1._dp) / (2._dp * SPI + 1._dp)
+        !precompute shift and penetrability factors at each stored resonance
+        Do r = 1,res_list%L(l)%n_r
+            Call PSphi( l-1 , res_List%L(l)%a * res_list%k0*Sqrt( Abs(res_list%L(l)%ErgG(r,1)) ) , & 
+                        & res_list%L(l)%ErgG(r,d) , res_list%L(l)%ErgG(r,d-1) )
         End Do
     End Do
 End Subroutine Read_res_sect
@@ -2087,65 +2031,65 @@ Pure Subroutine sig_Resonance(r,E,sT,sS)
     Complex(dp), Parameter :: cmplx1 = CMPLX(1._dp,KIND=dp)
     Complex(dp), Parameter :: cmplx2 = CMPLX(2._dp,KIND=dp)
 
-    sT = 0._dp
-    sS = 0._dp
-    !check if energy is in resonance range
-    If (E.LT.r%E_range(1) .OR. E.GT.r%E_range(2)) Return
-    E_eV = 1000._dp * E !local energy units in eV
-    k = r%k0 * Sqrt(E_eV)
-    Do l = 1,r%n_L  !sum over levels (l)
-        Call PSphi( l-1 , k*r%a(1,l) , P , S )
-        two_phi = 2._dp * Phi_hard( l-1 , k*r%a(2,l) )  !This WASTES effort for NAPS=1 (because rho and rho-hat are equal)
-        If (r%is_RM) Then !Reich-Moore formalism
-            Do J = 1,r%L(l)%n_J  !sum over spins (J)
-                !compute the R-function
-                Rnn = cmplx1 - Sum( &  !sum over r
-                                    & CMPLX( 0._dp , 0.5_dp*r%L(l)%J(j)%ErG(:,2)*P/r%L(l)%J(j)%ErG(:,5) , KIND=dp ) / &
-                                    & CMPLX( r%L(l)%J(j)%ErG(:,1)-E_eV , -0.5_dp*r%L(l)%J(j)%ErG(:,3) , KIND=dp ) &
-                                    & )
-                !compute the element of the scattering matrix
-                Unn = Exp(CMPLX(0._dp,-two_phi,KIND=dp)) * (cmplx2 / Rnn - cmplx1)
-                !compute second channel contribution where applicable
-                If (r%L(l)%dj(J)) Then
-                    Dj = 2._dp * (1._dp - Cos(two_phi))
-                Else
-                    Dj = 0._dp
-                End If
-                sT = sT + r%L(l)%gj(J) * (1._dp - Real(Unn,dp) + Dj)
-                sS = sS + r%L(l)%gj(J) * (Abs(cmplx1 - Unn)**2 + Dj)
-            End Do
-        Else !r%is_MLBW, MLBW formalism
-            Do J = 1,r%L(l)%n_J  !sum over spins (J)
-                !compute the element of the scattering matrix
-                Unn = Exp(CMPLX(0._dp,-two_phi,KIND=dp)) * & 
-                    & (cmplx1 + Sum( &  !sum over r
-                                     & CMPLX( 0._dp , r%L(l)%J(j)%ErG(:,3)**P/r%L(l)%J(j)%ErG(:,6) , KIND=dp ) / &
-                                     & CMPLX( r%L(l)%J(j)%ErG(:,1) - E_eV , -0.5_dp*r%L(l)%J(j)%ErG(:,2) , KIND=dp ) &
-                                     & ) &
-                      & )
-                !compute second channel contribution where applicable
-                If (r%L(l)%dj(J)) Then
-                    Dj = 2._dp * (1._dp - Cos(two_phi))
-                Else
-                    Dj = 0._dp
-                End If
-                sS = sS + r%L(l)%gj(J) * (Abs(cmplx1 - Unn)**2 + Dj)
-                !Compute the absorption cross section (scattering cross section will be added to absorption to obtain total once 
-                !all levels are summed)
-                sT = sT + r%L(l)%gj(J) * Sum( &  !sum over r
-                                              & r%L(l)%J(j)%ErG(:,3)*r%L(l)%J(j)%ErG(:,4) / &
-                                              & ((E_eV - r%L(l)%J(j)%ErG(:,1))**2 + 0.25_dp*r%L(l)%J(j)%ErG(:,2)**2) &
-                                              & )
-            End Do
-        End If
-    End Do
-    If (r%is_RM) Then
-        sS = sS * TwoPi / k**2
-        sT = sT * TwoPi / k**2
-    Else !r%is_MLBW)
-        sS = sS * Pi / k**2
-        sT = sT * Pi / k**2 + sS
-    End If
+    ! sT = 0._dp
+    ! sS = 0._dp
+    ! !check if energy is in resonance range
+    ! If (E.LT.r%E_range(1) .OR. E.GT.r%E_range(2)) Return
+    ! E_eV = 1000._dp * E !local energy units in eV
+    ! k = r%k0 * Sqrt(E_eV)
+    ! Do l = 1,r%n_L  !sum over levels (l)
+    !     Call PSphi( l-1 , k*r%a(1,l) , P , S )
+    !     two_phi = 2._dp * Phi_hard( l-1 , k*r%a(2,l) )  !This WASTES effort for NAPS=1 (because rho and rho-hat are equal)
+    !     If (r%is_RM) Then !Reich-Moore formalism
+    !         Do J = 1,r%L(l)%n_J  !sum over spins (J)
+    !             !compute the R-function
+    !             Rnn = cmplx1 - Sum( &  !sum over r
+    !                                 & CMPLX( 0._dp , 0.5_dp*r%L(l)%J(j)%ErG(:,2)*P/r%L(l)%J(j)%ErG(:,5) , KIND=dp ) / &
+    !                                 & CMPLX( r%L(l)%J(j)%ErG(:,1)-E_eV , -0.5_dp*r%L(l)%J(j)%ErG(:,3) , KIND=dp ) &
+    !                                 & )
+    !             !compute the element of the scattering matrix
+    !             Unn = Exp(CMPLX(0._dp,-two_phi,KIND=dp)) * (cmplx2 / Rnn - cmplx1)
+    !             !compute second channel contribution where applicable
+    !             If (r%L(l)%dj(J)) Then
+    !                 Dj = 2._dp * (1._dp - Cos(two_phi))
+    !             Else
+    !                 Dj = 0._dp
+    !             End If
+    !             sT = sT + r%L(l)%gj(J) * (1._dp - Real(Unn,dp) + Dj)
+    !             sS = sS + r%L(l)%gj(J) * (Abs(cmplx1 - Unn)**2 + Dj)
+    !         End Do
+    !     Else !r%is_MLBW, MLBW formalism
+    !         Do J = 1,r%L(l)%n_J  !sum over spins (J)
+    !             !compute the element of the scattering matrix
+    !             Unn = Exp(CMPLX(0._dp,-two_phi,KIND=dp)) * & 
+    !                 & (cmplx1 + Sum( &  !sum over r
+    !                                  & CMPLX( 0._dp , r%L(l)%J(j)%ErG(:,3)**P/r%L(l)%J(j)%ErG(:,6) , KIND=dp ) / &
+    !                                  & CMPLX( r%L(l)%J(j)%ErG(:,1) - E_eV , -0.5_dp*r%L(l)%J(j)%ErG(:,2) , KIND=dp ) &
+    !                                  & ) &
+    !                   & )
+    !             !compute second channel contribution where applicable
+    !             If (r%L(l)%dj(J)) Then
+    !                 Dj = 2._dp * (1._dp - Cos(two_phi))
+    !             Else
+    !                 Dj = 0._dp
+    !             End If
+    !             sS = sS + r%L(l)%gj(J) * (Abs(cmplx1 - Unn)**2 + Dj)
+    !             !Compute the absorption cross section (scattering cross section will be added to absorption to obtain total once 
+    !             !all levels are summed)
+    !             sT = sT + r%L(l)%gj(J) * Sum( &  !sum over r
+    !                                           & r%L(l)%J(j)%ErG(:,3)*r%L(l)%J(j)%ErG(:,4) / &
+    !                                           & ((E_eV - r%L(l)%J(j)%ErG(:,1))**2 + 0.25_dp*r%L(l)%J(j)%ErG(:,2)**2) &
+    !                                           & )
+    !         End Do
+    !     End If
+    ! End Do
+    ! If (r%is_RM) Then
+    !     sS = sS * TwoPi / k**2
+    !     sT = sT * TwoPi / k**2
+    ! Else !r%is_MLBW)
+    !     sS = sS * Pi / k**2
+    !     sT = sT * Pi / k**2 + sS
+    ! End If
 End Subroutine sig_Resonance
 
 Pure Function sig_Composite(E,n_E,E_list,lnE_list,E_index,n1,n2,t_list,sig_list) Result(sig)
