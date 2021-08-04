@@ -67,10 +67,10 @@ Module n_Cross_Sections
 
     Type ::  res_sig_level_Type
         Integer :: n_r  !number of resonance energies in this level
-        Real(dp) :: a  ![1E-12 cm] channel radius
-        Real(dp) :: ap ![1E-12 cm] scattering radius
+        Real(dp) :: a  ![m] channel radius
+        Real(dp) :: ap ![m] scattering radius
         Real(dp), Allocatable :: ErgG(:,:)  !Has dimension 1:n_r and 1:b where b depends on the formalism used to define resonances
-                                            !For all formalisms, in dim 2, 1=Er[keV] and 2=statistical factor gJ
+                                            !For all formalisms, in dim 2, 1=Er[eV] and 2=statistical factor gJ
                                             !For Riech-Moore formalism:  b=6, in dim 2, 3=neutron width, 4=radiation width
                                             !For BW formalisms: b=7, in dim 2, 3=total width, 4=neutron width, 5=radiation width
                                             !For all formalisms, in dim 2, the last 2 columns are shift and penetrability at Er
@@ -83,7 +83,7 @@ Module n_Cross_Sections
             Logical :: is_MLBW  !indicates use of Mulit Level BW (MLBW) for resonance representation
         !Other formalisms (Adler-Adler, Limited-R) are not supported at this time
         Real(dp) :: E_range(1:2)  ![keV]  low and high energy bounds over which resonant contribution is computed
-        Real(dp) :: k0  !gives k (neutron wave #) when multiplied by Sqrt(E[eV])
+        Real(dp) :: k0  ![1/m (when multiplied by Sqrt(eV))] gives k (neutron wave #) when multiplied by Sqrt(E[eV])
         Integer :: n_L  !number of levels in which resonances are grouped
         Type(res_sig_level_Type), Allocatable :: L(:)   !has dimension 1:n_L, resonance parameters for each level
     End Type
@@ -1379,8 +1379,7 @@ Subroutine Read_res_sect(res_unit,res_List)
     Implicit None
     Integer, Intent(In) :: res_unit
     Type(res_sig_Type), Intent(Out) :: res_list
-
-    Integer :: J,l,r,d
+    Integer :: l,r,d
     Real(dp) :: trash
     Integer :: LRF,NRO,NAPS
     Real(dp) :: SPI,AP0,AP
@@ -2013,83 +2012,88 @@ Function sig_A(CS,E,iE_get,iE_put) Result(sA)
     If (Present(iE_get)) iE_get = E_index
 End Function sig_A
 
-Pure Subroutine sig_Resonance(r,E,sT,sS)
+Pure Subroutine sig_Resonance(res,E,sT,sS)
     Use Kinds, Only: dp
     Use Global, Only: Pi
     Use Global, Only: TwoPi
     Implicit None
-    Type(res_sig_Type), Intent(In) :: r
+    Type(res_sig_Type), Intent(In) :: res
     Real(dp), Intent(In) :: E ![keV]
     Real(dp), Intent(Out) :: sT
     Real(dp), Intent(Out) :: sS
-    Real(dp) :: E_eV  !energy in eV for local calcs
-    Real(dp) :: k
-    Real(dp) :: two_phi,S,P
-    Integer :: l,J
-    Complex(dp) :: Rnn,Unn
-    Real(dp) :: Dj
-    Complex(dp), Parameter :: cmplx1 = CMPLX(1._dp,KIND=dp)
-    Complex(dp), Parameter :: cmplx2 = CMPLX(2._dp,KIND=dp)
+    Real(dp) :: E_eV  ![eV] energy in eV for local calcs
+    Real(dp) :: k  ![1/m] neutron wave number
+    Real(dp) :: sA
+    Real(dp) :: S,P,phi
+    Real(dp) :: Sin_sq_phi
+    Integer :: l,r,rr
+    Real(dp) :: Gn,Gnp
+    Real(dp) :: Epr,Eprp
+    Real(dp) :: Gt,Gtp
+    Real(dp) :: c,cc
+    Real(dp) :: G,H
 
-    ! sT = 0._dp
-    ! sS = 0._dp
-    ! !check if energy is in resonance range
-    ! If (E.LT.r%E_range(1) .OR. E.GT.r%E_range(2)) Return
-    ! E_eV = 1000._dp * E !local energy units in eV
-    ! k = r%k0 * Sqrt(E_eV)
-    ! Do l = 1,r%n_L  !sum over levels (l)
-    !     Call PSphi( l-1 , k*r%a(1,l) , P , S )
-    !     two_phi = 2._dp * Phi_hard( l-1 , k*r%a(2,l) )  !This WASTES effort for NAPS=1 (because rho and rho-hat are equal)
-    !     If (r%is_RM) Then !Reich-Moore formalism
-    !         Do J = 1,r%L(l)%n_J  !sum over spins (J)
-    !             !compute the R-function
-    !             Rnn = cmplx1 - Sum( &  !sum over r
-    !                                 & CMPLX( 0._dp , 0.5_dp*r%L(l)%J(j)%ErG(:,2)*P/r%L(l)%J(j)%ErG(:,5) , KIND=dp ) / &
-    !                                 & CMPLX( r%L(l)%J(j)%ErG(:,1)-E_eV , -0.5_dp*r%L(l)%J(j)%ErG(:,3) , KIND=dp ) &
-    !                                 & )
-    !             !compute the element of the scattering matrix
-    !             Unn = Exp(CMPLX(0._dp,-two_phi,KIND=dp)) * (cmplx2 / Rnn - cmplx1)
-    !             !compute second channel contribution where applicable
-    !             If (r%L(l)%dj(J)) Then
-    !                 Dj = 2._dp * (1._dp - Cos(two_phi))
-    !             Else
-    !                 Dj = 0._dp
-    !             End If
-    !             sT = sT + r%L(l)%gj(J) * (1._dp - Real(Unn,dp) + Dj)
-    !             sS = sS + r%L(l)%gj(J) * (Abs(cmplx1 - Unn)**2 + Dj)
-    !         End Do
-    !     Else !r%is_MLBW, MLBW formalism
-    !         Do J = 1,r%L(l)%n_J  !sum over spins (J)
-    !             !compute the element of the scattering matrix
-    !             Unn = Exp(CMPLX(0._dp,-two_phi,KIND=dp)) * & 
-    !                 & (cmplx1 + Sum( &  !sum over r
-    !                                  & CMPLX( 0._dp , r%L(l)%J(j)%ErG(:,3)**P/r%L(l)%J(j)%ErG(:,6) , KIND=dp ) / &
-    !                                  & CMPLX( r%L(l)%J(j)%ErG(:,1) - E_eV , -0.5_dp*r%L(l)%J(j)%ErG(:,2) , KIND=dp ) &
-    !                                  & ) &
-    !                   & )
-    !             !compute second channel contribution where applicable
-    !             If (r%L(l)%dj(J)) Then
-    !                 Dj = 2._dp * (1._dp - Cos(two_phi))
-    !             Else
-    !                 Dj = 0._dp
-    !             End If
-    !             sS = sS + r%L(l)%gj(J) * (Abs(cmplx1 - Unn)**2 + Dj)
-    !             !Compute the absorption cross section (scattering cross section will be added to absorption to obtain total once 
-    !             !all levels are summed)
-    !             sT = sT + r%L(l)%gj(J) * Sum( &  !sum over r
-    !                                           & r%L(l)%J(j)%ErG(:,3)*r%L(l)%J(j)%ErG(:,4) / &
-    !                                           & ((E_eV - r%L(l)%J(j)%ErG(:,1))**2 + 0.25_dp*r%L(l)%J(j)%ErG(:,2)**2) &
-    !                                           & )
-    !         End Do
-    !     End If
-    ! End Do
-    ! If (r%is_RM) Then
-    !     sS = sS * TwoPi / k**2
-    !     sT = sT * TwoPi / k**2
-    ! Else !r%is_MLBW)
-    !     sS = sS * Pi / k**2
-    !     sT = sT * Pi / k**2 + sS
-    ! End If
+    sT = 0._dp
+    sS = 0._dp
+    sA = 0._dp
+    !check if energy is in resonance range
+    If (E.LT.res%E_range(1) .OR. E.GT.res%E_range(2)) Return
+    E_eV = 1000._dp * E !local energy units in eV
+    k = res%k0 * Sqrt(E_eV)
+    If (res%is_RM) Then
+    Else If (res%is_BW) Then
+        Do l = 0,res%n_L-1
+            If (res%L(l)%a .EQ. res%L(l)%ap) Then
+                Call PSphi(l,k*res%L(l)%a,P,S,phi)
+            Else
+                Call PSphi(l,k*res%L(l)%a,P,S)
+                phi = Phi_hard(l,k*res%L(l)%ap)
+            End If
+            Sin_sq_phi = Sin(phi)**2
+            sS = sS + Real(8*l+1,dp) * Sin_sq_phi
+            Do r = 1,res%L(l)%n_r
+            ASSOCIATE ( Er  => res%L(l)%ErgG(r,1), & !resonance energy
+                      & gJ  => res%L(l)%ErgG(r,2), & !statistical factor
+                      & Gtr => res%L(l)%ErgG(r,3), & !total width at resonance energy
+                      & Gnr => res%L(l)%ErgG(r,4), & !neutron width at resosnance energy
+                      & Ggr => res%L(l)%ErgG(r,5), & !radiation width
+                      & Sr  => res%L(l)%ErgG(r,6), & !shift factor at resonance energy
+                      & Pr  => res%L(l)%ErgG(r,7)  ) !penetration factor at resosnace energy
+                Gn = P * Gnr / Pr !neutron width
+                Epr = Er + Gnr * (Sr - S) / (2._dp * Pr) !Primed resonance energy
+                Gt = Gn + Ggr + (Gtr - Gnr - Ggr) !total width, the last grouped sum is the 'competitve width' or Gxr
+                c = gJ / ((E_eV - Epr)**2 + 0.25_dp * Gt**2) !precomputed value
+                sS = sS + c * ( Gn**2 - 2._dp * (Gn*Gt*Sin_sq_phi + (E_eV-Epr)*Gn*Sin(2._dp*phi)) ) !add this term to sS
+                If (res%is_MLBW) Then !must also add resonance-resonance interference term
+                    G = 0._dp
+                    H = 0._dp
+                    Do rr = 1,res%L(l)%n_r
+                        If (rr .EQ. r) Cycle
+                    ASSOCIATE ( Erp  => res%L(l)%ErgG(rr,1), & !resonance r-prime energy
+                              & Gtrp => res%L(l)%ErgG(rr,3), & !total width at resonance r-prime energy
+                              & Gnrp => res%L(l)%ErgG(rr,4), & !neutron width at resonance r-prime energy
+                              & Ggrp => res%L(l)%ErgG(rr,5), & !radiation width at resonance r-prime
+                              & Srp  => res%L(l)%ErgG(rr,6), & !shift factor at at resonance r-prime energy
+                              & Prp  => res%L(l)%ErgG(rr,7)  ) !penetration factor at at resonance r-prime energy
+                        Gnp = P * Gnrp / Prp !neutron width at resonance r-prime
+                        Eprp = Erp + Gnrp * (Srp - S) / (2._dp * Prp) !Primed resonance energy at resonance r-prime
+                        Gtp = Gnp + Ggrp + (Gtrp - Gnrp - Ggrp) !total width, the last grouped sum is the 'competitve width' or Gxr
+                        cc = Gn * Gnp / ( (Epr - Eprp)**2 + 0.25_dp*(Gt + Gtp)**2 ) !precomputed value
+                        G = G + cc * (Gt + Gtp)
+                        H = H + cc * (Er - Erp)
+                    End ASSOCIATE
+                    End Do
+                    sS = sS + c * (0.5_dp * G * Gt + 2._dp * H * (E_eV-Er))
+                End If
+                sA = sA + c * (Gn * Ggr) !add this term to sA
+            End ASSOCIATE
+            End Do
+        End Do
+        sS = Pi * sS / k**2
+        sA = Pi * sA / k**2
+        sT = sS + sA
+    End If
+
 End Subroutine sig_Resonance
 
 Pure Function sig_Composite(E,n_E,E_list,lnE_list,E_index,n1,n2,t_list,sig_list) Result(sig)
