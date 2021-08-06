@@ -68,8 +68,8 @@ Module n_Cross_Sections
 
     Type ::  res_sig_level_Type
         Integer :: n_r  !number of resonance energies in this level
-        Real(dp) :: a  ![m] channel radius
-        Real(dp) :: ap ![m] scattering radius
+        Real(dp) :: a  ![1E-12 cm] channel radius
+        Real(dp) :: ap ![1E-12 cm] scattering radius
         Real(dp), Allocatable :: ErgG(:,:)  !Has dimension 1:n_r and 1:b where b depends on the formalism used to define resonances
                                             !For all formalisms, in dim 2, 1=Er[eV] and 2=statistical factor gJ
                                             !For Riech-Moore formalism:  b=6, in dim 2, 3=neutron width, 4=radiation width
@@ -84,7 +84,7 @@ Module n_Cross_Sections
             Logical :: is_MLBW  !indicates use of Mulit Level BW (MLBW) for resonance representation
         !Other formalisms (Adler-Adler, Limited-R) are not supported at this time
         Real(dp) :: E_range(1:2)  ![keV]  low and high energy bounds over which resonant contribution is computed
-        Real(dp) :: k0  ![1/m (when multiplied by Sqrt(eV))] gives k (neutron wave #) when multiplied by Sqrt(E[eV])
+        Real(dp) :: k0  ![1/(1E-12 cm) (when multiplied by Sqrt(eV))] gives k (neutron wave #) when multiplied by Sqrt(E[eV])
         Integer :: n_L  !number of levels in which resonances are grouped
         Integer :: s(1:2)  !for RM formalism, minumum and maximum values for 'spin' sums
         Type(res_sig_level_Type), Allocatable :: L(:)   !has dimension 1:n_L, resonance parameters for each level
@@ -107,17 +107,23 @@ Module n_Cross_Sections
                                                !isotope cross section representation
         Type(res_sig_Type), Allocatable :: res_cs(:)  !has dimension 1:n_iso, resonance cross sections for each isotope
     Contains
-        Procedure, Pass :: sig_T  !given energy, returns total microscopic cross section for the atmosphere
-        Procedure, Pass :: sig_S  !given energy, returns microscopic scatter cross section for the atmosphere
-        Procedure, Pass :: sig_A  !given energy, returns microscopic absorption cross section for the atmosphere
-        Procedure, Pass :: sig_T_A  !given energy, returns total and absorption microscopic cross sections for the atmosphere
+        Procedure, Pass :: sig_T_all  !given energy, returns total microscopic cross section for the atmosphere
+        Procedure, Pass :: sig_T_iso  !given energy, returns total microscopic cross section for a specific isotope
+        Procedure, Pass :: sig_S_all  !given energy, returns microscopic scatter cross section for the atmosphere
         Procedure, Pass :: sig_S_iso  !given energy, returns microscopic scatter cross section for a specific isotope
+        Procedure, Pass :: sig_A_all  !given energy, returns microscopic absorption cross section for the atmosphere
+        Procedure, Pass :: sig_A_iso  !given energy, returns microscopic absorption cross section for a specific isotope
+        Procedure, Pass :: sig_T_A  !given energy, returns total and absorption microscopic cross sections for the atmosphere
         Procedure, Pass :: sig_T_broad
         Procedure, Pass :: sig_T_A_broad
         Procedure, Pass :: sig_S_iso_broad
+        GENERIC :: sig_T => sig_T_all , sig_T_iso
+        GENERIC :: sig_S => sig_S_all , sig_S_iso , sig_S_iso_broad
+        GENERIC :: sig_A => sig_A_all , sig_A_iso
     End Type
 
-    Real(dp), Parameter :: rTol = 1.E-5_dp  !relative tolerance for convergence of broadening integrals, cross section data has 
+    Integer, Parameter :: Tmax = 16  !limit for number of Romberg extrapolation stages in broadening quadrature
+    Real(dp), Parameter :: rTol = 1.E-6_dp  !relative tolerance for convergence of broadening integrals, cross section data has 
                                             !about 5 good digits...
 
     !MT_disappearance lists the ENDF MT numbers corresponding to neutron interactions WITHOUT a neutron in the exit channel.
@@ -312,6 +318,7 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
     !read in ALL (including duplicates) the energies and generate a unified list
     Allocate(Character(max_path_len) :: ENDF_file_name)
     first_time = .TRUE.
+    n_start = 0
     Do h = 1,2
     !FIRST TIME: Count interactions and total number of energies for unified list
     !SECOND TIME: Read in ALL (including duplicates) the energies and generate unified list
@@ -915,11 +922,11 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
         Write(v_unit,'(A)') half_dash_line
         Write(v_unit,*)
         !UNDONE
-        Do i = 1,CS%n_E_uni
-            Print*,CS%E_uni(i)
-            Call CS%sig_T_A(CS%E_uni(i),sT,sA)
-            Write(v_unit,'(3ES27.16E3)') CS%E_uni(i),sT,sA
-        End Do
+        ! Do i = 1,CS%n_E_uni
+        !     Print*,CS%E_uni(i)
+        !     Call CS%sig_T_A(CS%E_uni(i),sT,sA)
+        !     Write(v_unit,'(3ES27.16E3)') CS%E_uni(i),sT,sA
+        ! End Do
         !UNDONE
         !UNDONE
         !UNDONE
@@ -1265,6 +1272,7 @@ Subroutine Read_da_sect_MF4(da_unit,E_list,da_list,n_p,LTT)
         End Do
         da_list(i)%ua(2,:) = Log(da_list(i)%ua(2,:)) !Store logarithm of probability density (reduces cost of interpolation)
     Else If (LTT .EQ. 3) Then  !da is tabulated for high energies but legendre for low energies
+        new_line = .FALSE.
         !Read in low energy Legendre points
         Do i = 1,n_p
             da_list(i)%is_legendre = .TRUE.
@@ -1435,26 +1443,26 @@ Subroutine Read_res_sect(res_unit,res_List)
     !read AWRI from next line
     Read(res_unit,'(E11.6E1)') AWRI
     !compute k0 (when multiplied by Sqrt(E[eV]), gives neutron wave number)
-    res_List%k0 = (Sqrt(2._dp*mn) / h_bar) * (AWRI / (AWRI + 1._dp)) * Sqrt(1._dp / (1000._dp*keV_per_Joule))
+    res_List%k0 = (Sqrt(2._dp*mn) / h_bar) * (AWRI / (AWRI + 1._dp)) * Sqrt(1._dp / (1000._dp*keV_per_Joule)) * 1.E-14_dp
     Backspace(res_unit)  !that line will need to be read again
     !allocate levels
     res_List%n_L = nL
     Allocate(res_List%L(1:nL))
     Do l = 1,nL
-        res_List%L(l)%ap = AP0 * 1.E-14_dp  !convert to meters, default value
+        res_List%L(l)%ap = AP0  !default value
         If (NAPS .EQ. 0) Then
-            res_list%L(l)%a = (0.08_dp + 0.123_dp * AWRI**one_third) * 1.E-14_dp  !convert to meters
+            res_list%L(l)%a = (0.08_dp + 0.123_dp * AWRI**one_third)
         Else
-            res_list%L(l)%a = AP0 * 1.E-14_dp  !convert to meters
+            res_list%L(l)%a = AP0
         End If
         !read AWRI, APL and number of resonances in first layer from next line
         Read(res_unit,'(5E11.6E1,I11)') AWRI, AP, trash, trash, trash, nR
         res_list%L(l)%n_r = nR
-        If (AP .NE. 0._dp) res_List%L(l)%ap = AP * 1.E-14_dp  !convert to meters, level specific scattering radius
-        If (res_list%is_RM) Then
-            d = 6
-        Else If (res_list%is_BW) Then
+        If (AP .NE. 0._dp) res_List%L(l)%ap = AP  !level specific scattering radius
+        If (res_list%is_BW) Then
             d = 7
+        Else
+            d = 6
         End If
         Allocate(res_list%L(l)%ErgG(1:nR,1:d))
         res_list%L(l)%ErgG = 0._dp
@@ -1854,8 +1862,8 @@ Subroutine sig_T_A(CS,E,sT,sA,iE_get,iE_put)
     If (Present(iE_get)) iE_get = E_index
 End Subroutine sig_T_A
 
-Function sig_T(CS,E,iE_get,iE_put) Result(sT)
-!returns total cross section (sig_T) for the total atmosphere
+Function sig_T_all(CS,E,iE_get,iE_put) Result(sT)
+!returns total cross section (sig_T_all) for the total atmosphere
     Use Kinds, Only: dp
     Use Utilities, Only: Bisection_Search
     Implicit None
@@ -1883,7 +1891,7 @@ Function sig_T(CS,E,iE_get,iE_put) Result(sT)
             sS = sS + CS%iso_Fractions(i) * resS
             sA = sA + CS%iso_fractions(i) * (resT - resS)
         End If
-        !background contribution
+        !background contribution from scatter
         sS = sS + CS%iso_Fractions(i) * sig_Composite( E, & 
                                                      & CS%n_E_uni, & 
                                                      & CS%E_uni, & 
@@ -1893,6 +1901,7 @@ Function sig_T(CS,E,iE_get,iE_put) Result(sT)
                                                      & CS%lev_cs(i)%n_lev, & 
                                                      & CS%lev_cs(i)%thresh, & 
                                                      & CS%lev_cs(i)%sig ) 
+        !background contribution from absorption
         sA = sA + CS%iso_Fractions(i) * sig_Composite( E, & 
                                                      & CS%n_E_uni, & 
                                                      & CS%E_uni, & 
@@ -1905,10 +1914,58 @@ Function sig_T(CS,E,iE_get,iE_put) Result(sT)
     End Do
     sT = sA + sS
     If (Present(iE_get)) iE_get = E_index
-End Function sig_T
+End Function sig_T_all
 
-Function sig_S(CS,E,iE_get,iE_put) Result(sS)
-!returns scattering cross section (sig_S) for the total atmosphere
+Function sig_T_iso(CS,iso,E,iE_get,iE_put) Result(sT)
+!returns total cross section (sig_T_iso) for a single isotope (iso)
+    Use Kinds, Only: dp
+    Use Utilities, Only: Bisection_Search
+    Implicit None
+    Real(dp) :: sT
+    Class(CS_Type), Intent(In) :: CS
+    Integer, Intent(In) :: iso
+    Real(dp), Intent(In) :: E
+    Integer, Intent(Out), Optional :: iE_get
+    Integer, Intent(In), Optional :: iE_put
+    Integer :: E_index
+    Real(dp) :: resT,resS
+
+    If (Present(iE_put)) Then
+        E_index = iE_put
+    Else
+        E_index = Bisection_Search(E,CS%E_uni,CS%n_E_uni)
+    End If
+    sT = 0._dp
+    !resonant contribution
+    If (CS%has_res_cs(iso)) Then
+        Call sig_Resonance(CS%res_cs(iso),E,resT,resS)
+        sT = sT + resT
+    End If
+    !background contribution from scatter
+    sT = sT + sig_Composite( E,                     & 
+                           & CS%n_E_uni,            & 
+                           & CS%E_uni,              & 
+                           & CS%lnE_uni,            & 
+                           & E_index,               & 
+                           & 0,                     & 
+                           & CS%lev_cs(iso)%n_lev,  & 
+                           & CS%lev_cs(iso)%thresh, & 
+                           & CS%lev_cs(iso)%sig     )
+    !background contribution from absorption
+    sT = sT + sig_Composite( E,                      & 
+                           & CS%n_E_uni,             & 
+                           & CS%E_uni,               & 
+                           & CS%lnE_uni,             & 
+                           & E_index,                & 
+                           & 1,                      & 
+                           & CS%abs_cs(iso)%n_modes, & 
+                           & CS%abs_cs(iso)%thresh,  & 
+                           & CS%abs_cs(iso)%sig      )
+    If (Present(iE_get)) iE_get = E_index
+End Function sig_T_iso
+
+Function sig_S_all(CS,E,iE_get,iE_put) Result(sS)
+!returns scattering cross section (sig_S_all) for the total atmosphere
     Use Kinds, Only: dp
     Use Utilities, Only: Bisection_Search
     Implicit None
@@ -1945,7 +2002,7 @@ Function sig_S(CS,E,iE_get,iE_put) Result(sS)
                                                      & CS%lev_cs(i)%sig )
     End Do
     If (Present(iE_get)) iE_get = E_index
-End Function sig_S
+End Function sig_S_all
 
 Function sig_S_iso(CS,iso,E,iE_get,iE_put) Result(sS)
 !returns scattering cross section (sig_S_iso) for a single isotope (iso)
@@ -1985,8 +2042,8 @@ Function sig_S_iso(CS,iso,E,iE_get,iE_put) Result(sS)
     If (Present(iE_get)) iE_get = E_index
 End Function sig_S_iso
 
-Function sig_A(CS,E,iE_get,iE_put) Result(sA)
-!returns absorption cross section (sig_A) for the total atmosphere
+Function sig_A_all(CS,E,iE_get,iE_put) Result(sA)
+!returns absorption cross section (sig_A_all) for the total atmosphere
     Use Kinds, Only: dp
     Use Utilities, Only: Bisection_Search
     Implicit None
@@ -2023,7 +2080,45 @@ Function sig_A(CS,E,iE_get,iE_put) Result(sA)
                                                      & CS%abs_cs(i)%sig )
     End Do
     If (Present(iE_get)) iE_get = E_index
-End Function sig_A
+End Function sig_A_all
+
+Function sig_A_iso(CS,iso,E,iE_get,iE_put) Result(sA)
+!returns absorption cross section (sig_A_iso) for a single isotope (iso)
+    Use Kinds, Only: dp
+    Use Utilities, Only: Bisection_Search
+    Implicit None
+    Real(dp) :: sA
+    Class(CS_Type), Intent(In) :: CS
+    Integer, Intent(In) :: iso
+    Real(dp), Intent(In) :: E
+    Integer, Intent(Out), Optional :: iE_get
+    Integer, Intent(In), Optional :: iE_put
+    Integer :: E_index
+    Real(dp) :: resT,resS
+
+    If (Present(iE_put)) Then
+        E_index = iE_put
+    Else
+        E_index = Bisection_Search(E,CS%E_uni,CS%n_E_uni)
+    End If
+    sA = 0._dp
+    !resonant contribution
+    If (CS%has_res_cs(iso)) Then
+        Call sig_Resonance(CS%res_cs(iso),E,resT,resS)
+        sA = sA + resT - resS
+    End If
+    !background contribution
+    sA = sA + sig_Composite( E,                       & 
+                            & CS%n_E_uni,             & 
+                            & CS%E_uni,               & 
+                            & CS%lnE_uni,             & 
+                            & E_index,                & 
+                            & 1,                      & 
+                            & CS%abs_cs(iso)%n_modes, & 
+                            & CS%abs_cs(iso)%thresh,  & 
+                            & CS%abs_cs(iso)%sig      )
+    If (Present(iE_get)) iE_get = E_index
+End Function sig_A_iso
 
 Pure Subroutine sig_Resonance(res,E,sT,sS)
     Use Kinds, Only: dp
@@ -2187,6 +2282,7 @@ Pure Function sig_Composite(E,n_E,E_list,lnE_list,E_index,n1,n2,t_list,sig_list)
     Integer, Parameter :: LogLog_interpolation = 5  !ln(y) is linear in ln(x) (log-log)
 
     sig = 0._dp
+    method = LinLin_interpolation
     i = n1 !initialize loop counter: loop runs at least once, from n1 to n2
     Do
         If (E_index .LE. t_list(i)) Exit
@@ -2312,7 +2408,6 @@ Function Broad_Romberg_T_A(CS,iE,vR1,vR2,gamma,v) Result(sig_T_A)
     Real(dp) :: vR
     Integer, Parameter :: total = 1
     Integer, Parameter :: absor = 2
-    Integer, Parameter :: Tmax = 15  !maximum number of extrapolations in the table
     Real(dp) :: T(1:2,0:Tmax)  !Extrapolation table previous row
     Real(dp) :: Tk0(1:2),Tk(1:2)  !Extrapolation table current row values
     Integer :: i,j,k  !counters: i for table row, j for quadrature ordinates, k for table column
@@ -2413,7 +2508,6 @@ Function Broad_Romberg_T(CS,iE,vR1,vR2,gamma,v) Result(sT)
     Real(dp) :: sig_vR1,sig_vR2,sig_vR
     Real(dp) :: s1,s2
     Real(dp) :: vR
-    Integer, Parameter :: Tmax = 15  !maximum number of extrapolations in the table
     Real(dp) :: T(0:Tmax)  !Extrapolation table previous row
     Real(dp) :: Tk0,Tk  !Extrapolation table current row values
     Integer :: i,j,k  !counters: i for table row, j for quadrature ordinates, k for table column
@@ -2517,7 +2611,6 @@ Function Broad_Romberg_S_iso(CS,iso,iE,vR1,vR2,gamma,v) Result(sS)
     Real(dp) :: sig_vR1,sig_vR2,sig_vR
     Real(dp) :: s1,s2
     Real(dp) :: vR
-    Integer, Parameter :: Tmax = 15  !maximum number of extrapolations in the table
     Real(dp) :: T(0:Tmax)  !Extrapolation table previous row
     Real(dp) :: Tk0,Tk  !Extrapolation table current row values
     Integer :: i,j,k  !counters: i for table row, j for quadrature ordinates, k for table column
