@@ -70,7 +70,7 @@ Module n_Cross_Sections
         Integer :: n_r  !number of resonance energies in this level
         Real(dp) :: a  ![1E-12 cm] channel radius
         Real(dp) :: ap ![1E-12 cm] scattering radius
-        Real(dp), Allocatable :: ErgG(:,:)  !Has dimension 1:n_r and 1:b where b depends on the formalism used to define resonances
+        Real(dp), Allocatable :: EraG(:,:)  !Has dimension 1:n_r and 1:b where b depends on the formalism used to define resonances
                                             !For all formalisms, in dim 2, 1=Er[eV] and 2=statistical factor gJ
                                             !For Riech-Moore formalism:  b=6, in dim 2, 3=neutron width, 4=radiation width
                                             !For BW formalisms: b=7, in dim 2, 3=total width, 4=neutron width, 5=radiation width
@@ -85,6 +85,7 @@ Module n_Cross_Sections
         !Other formalisms (Adler-Adler, Limited-R) are not supported at this time
         Real(dp) :: E_range(1:2)  ![keV]  low and high energy bounds over which resonant contribution is computed
         Real(dp) :: k0  ![1/(1E-12 cm) (when multiplied by Sqrt(eV))] gives k (neutron wave #) when multiplied by Sqrt(E[eV])
+        Real(dp) :: spi  !target spin
         Integer :: n_L  !number of levels in which resonances are grouped
         Integer :: s(1:2)  !for RM formalism, minumum and maximum values for 'spin' sums
         Type(res_sig_level_Type), Allocatable :: L(:)   !has dimension 1:n_L, resonance parameters for each level
@@ -259,7 +260,7 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
     Real(dp) :: trash_r
     Logical :: v,first_time
     Character(15) :: v_string
-    Real(dp) :: sT,sA
+    Real(dp) :: sT,sA,En
 
     NameList /csSetupList1/ n_elements
     NameList /csSetupList2/ el_fractions,n_isotopes
@@ -921,6 +922,15 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
         Write(v_unit,'(A)') 'CROSS SECTION TRACES FOR VERIFICATION'
         Write(v_unit,'(A)') half_dash_line
         Write(v_unit,*)
+
+        Do i = 1,5
+            En = 1.E-4_dp
+            Write(*,*) i
+            Do j = 1,9
+                Write(*,*) En , CS%sig_T(i,En) , CS%sig_S(i,En) , CS%sig_A(i,En)
+                En = En * 10._dp
+            End Do
+        End Do
         !UNDONE
         ! Do i = 1,CS%n_E_uni
         !     Print*,CS%E_uni(i)
@@ -1074,9 +1084,9 @@ Subroutine Write_stored_res(v_unit,res)
         End If
         Do r = 1,res%L(l)%n_r
             If (res%is_RM) Then
-                Write(v_unit,'(A4,6ES26.16E3)') '',res%L(l)%ErgG(r,:)
+                Write(v_unit,'(A4,6ES26.16E3)') '',res%L(l)%EraG(r,:)
             Else If (res%is_MLBW) Then
-                Write(v_unit,'(A4,7ES26.16E3)') '',res%L(l)%ErgG(r,:)
+                Write(v_unit,'(A4,7ES26.16E3)') '',res%L(l)%EraG(r,:)
             End If
         End Do
     End Do
@@ -1435,6 +1445,7 @@ Subroutine Read_res_sect(res_unit,res_List)
     End If
     !read AP and n_L from the next line
     Read(res_unit,'(4E11.6E1,I11)') SPI, AP0, trash, trash, nL
+    res_list%spi = SPI
     If (res_list%is_RM) Then
         res_list%s = (/ NINT(Abs(SPI-0.5_dp)) , NINT(SPI+0.5_dp) /)
     Else
@@ -1464,28 +1475,26 @@ Subroutine Read_res_sect(res_unit,res_List)
         Else
             d = 6
         End If
-        Allocate(res_list%L(l)%ErgG(1:nR,1:d))
-        res_list%L(l)%ErgG = 0._dp
+        Allocate(res_list%L(l)%EraG(1:nR,1:d))
+        res_list%L(l)%EraG = 0._dp
         !read resonance parameters for this level
         Do r = 1,res_list%L(l)%n_r
-            Read(res_unit,'(6E11.6E1)') res_list%L(l)%ErgG(r,1), res_list%L(l)%ErgG(r,2), res_list%L(l)%ErgG(r,3), & 
-                                      & res_list%L(l)%ErgG(r,4), res_list%L(l)%ErgG(r,5), res_list%L(l)%ErgG(r,6)
+            Read(res_unit,'(6E11.6E1)') res_list%L(l)%EraG(r,1), res_list%L(l)%EraG(r,2), res_list%L(l)%EraG(r,3), & 
+                                      & res_list%L(l)%EraG(r,4), res_list%L(l)%EraG(r,5), res_list%L(l)%EraG(r,6)
         End Do
         !check for fission resonances
         found_fission = .FALSE.
         If (res_list%is_BW) Then
-            If (Any(res_list%L(l)%ErgG(:,6).NE.0._dp)) found_fission = .TRUE.
+            If (Any(res_list%L(l)%EraG(:,6).NE.0._dp)) found_fission = .TRUE.
         Else If (res_list%is_RM) Then
-            If (Any(res_list%L(l)%ErgG(:,5:6).NE.0._dp)) found_fission = .TRUE.
+            If (Any(res_list%L(l)%EraG(:,5:6).NE.0._dp)) found_fission = .TRUE.
         End If
         If (found_fission) Call Output_Message( 'ERROR:  Cross_Sections: Read_res_sect:  Dude, a fissionable '// &
                                               & 'atmosphere is just ridiculous. ',kill=.TRUE.)
-        !convert resonance spin (aJ, 2nd column) to statistical factor gJ
-        res_list%L(l)%ErgG(:,2) = 0.5_dp * (2._dp * res_list%L(l)%ErgG(:,2) + 1._dp) / (2._dp * SPI + 1._dp)
         !precompute shift and penetrability factors at each stored resonance
         Do r = 1,res_list%L(l)%n_r
-            Call PSphi( l-1 , res_List%L(l)%a * res_list%k0*Sqrt( Abs(res_list%L(l)%ErgG(r,1)) ) , & 
-                        & res_list%L(l)%ErgG(r,d) , res_list%L(l)%ErgG(r,d-1) )
+            Call PSphi( l-1 , res_List%L(l)%a * res_list%k0*Sqrt( Abs(res_list%L(l)%EraG(r,1)) ) , & 
+                        & res_list%L(l)%EraG(r,d) , res_list%L(l)%EraG(r,d-1) )
         End Do
     End Do
 End Subroutine Read_res_sect
@@ -2133,22 +2142,22 @@ Pure Subroutine sig_Resonance(res,E,sT,sS)
     Real(dp) :: k  ![1/m] neutron wave number
     Real(dp) :: sA
     Real(dp) :: S,P,phi
-    Real(dp) :: Sin_sq_phi,One_m_Cos2phi
+    Real(dp) :: Sin_sq_phi,One_m_Cos2phi,Sin_2phi
     Complex(dp) :: Exp_m2iphi
     Complex(dp) :: ImK,U
-    Integer :: l,r,rr,sp,J
+    Integer :: l,r,j
     Real(dp) :: gJ
     Real(dp) :: Gn,Gnp
     Real(dp) :: Epr,Eprp
     Real(dp) :: Gxr,Gxrp
     Real(dp) :: Gt,Gtp
-    Real(dp) :: c,cc
-    Real(dp) :: G,H
+    Real(dp) :: c
+    Real(dp) :: Jmin,Jmax,Jval
+    Integer :: nJ
     Complex(dp), Parameter :: z0 = CMPLX(0._dp,Kind=dp)
     Complex(dp), Parameter :: z1 = CMPLX(1._dp,Kind=dp)
     Complex(dp), Parameter :: z2 = CMPLX(2._dp,Kind=dp)
     Complex(dp), Parameter :: half_i = CMPLX(0._dp,0.5_dp,Kind=dp)
-    Complex(dp), Parameter :: two_i = CMPLX(0._dp,2._dp,Kind=dp)
 
     sT = 0._dp
     sS = 0._dp
@@ -2157,103 +2166,99 @@ Pure Subroutine sig_Resonance(res,E,sT,sS)
     If (E.LT.res%E_range(1) .OR. E.GT.res%E_range(2)) Return
     E_eV = 1000._dp * E !local energy units in eV
     k = res%k0 * Sqrt(E_eV)
+    Do l = 1,res%n_L !Performs the sum over levels for Brookhaven 2018:
+                     !  eq D.1 and D.3 for SLBW
+                     !  eq D.19 and D.3 for MLBW
+                     !  eq D.30 and D.32 for RM
+        If (res%L(l)%a .EQ. res%L(l)%ap) Then
+            !S,P,phi are computed from recursive forms from Brookhaven 2018 Table D.1
+            Call PSphi(l-1,k*res%L(l)%a,P,S,phi)
+        Else
+            !S,P are computed from recursive forms from Brookhaven 2018 Table D.1
+            Call PSphi(l-1,k*res%L(l)%a,P,S)
+            !phi is computed from recursive forms from Brookhaven 2018 Table D.1 w/ a different value of rho
+            phi = Phi_hard(l-1,k*res%L(l)%ap)
+        End If
+        If (res%is_SLBW) Then
+            Sin_sq_phi = Sin(phi)**2
+            Sin_2phi = Sin(2._dp*phi)
+            sS = sS + Real(4*(2*(l-1)+1),dp) * Sin_sq_phi !first term of Brookhaven 2018 eq D.2
+        Else !MLBW and RM
+            Exp_m2iphi = Exp( CMPLX(0._dp,-2._dp*phi,Kind=dp) )
+        End If
     If (res%is_RM) Then
-        Do l = 1,res%n_L !Performs the sum over levels for Brookhaven 2018 eq D.30 and D.32
-            If (res%L(l)%a .EQ. res%L(l)%ap) Then
-                !S,P,phi are computed from recursive forms from Brookhaven 2018 Table D.1
-                Call PSphi(l-1,k*res%L(l)%a,P,S,phi)
-            Else
-                !S,P are computed from recursive forms from Brookhaven 2018 Table D.1
-                Call PSphi(l-1,k*res%L(l)%a,P,S)
-                !phi is computed from recursive forms from Brookhaven 2018 Table D.1 w/ a different value of rho
-                phi = Phi_hard(l-1,k*res%L(l)%ap)
-            End If
-            One_m_Cos2phi = 1._dp - Cos(phi)
-            Exp_m2iphi = Exp(-two_i * phi)
-            Do sp = res%s(1),res%s(2)
-                Do J = Abs(l-1-sp),l-1+sp
-                    ImK = z0
-                    Do r = 1,res%L(l)%n_r
-                    !ASSOCIATE construct creates short-hand variable names for the duration of the block
-                    ASSOCIATE ( Er  => res%L(l)%ErgG(r,1), & !resonance energy
-                              & Gnr => res%L(l)%ErgG(r,3), & !neutron width at resonance energy
-                              & Ggr => res%L(l)%ErgG(r,4), & !radiation width
-                              & Pr  => res%L(l)%ErgG(r,6)  ) !penetration factor at resonance energy
-                        Gn = P * Gnr / Pr !neutron width, Brookhaven 2018 eq D.7
-                        ImK = ImK + ( z1 - half_i * CMPLX(Gn,Kind=dp) / (CMPLX(Er-E_eV,Kind=dp) - half_i*CMPLX(Ggr,Kind=dp)) )
-                    End ASSOCIATE
-                    End Do !r
-                    U = Exp_m2iphi * (z2 * (z1/ImK) - z1)
-                    gJ = Real(2*J + 1,dp) / Real(4*res%s(2),dp)
-                    sT = sT + gJ * Real(z1 - U)
-                    sS = sS + gJ * Abs(z1 - U)**2
-                End Do !J
-            End Do !sp
-        End Do !l
+        If (res%L(l)%a .EQ. res%L(l)%ap) Then
+            !S,P,phi are computed from recursive forms from Brookhaven 2018 Table D.1
+            Call PSphi(l-1,k*res%L(l)%a,P,S,phi)
+        Else
+            !S,P are computed from recursive forms from Brookhaven 2018 Table D.1
+            Call PSphi(l-1,k*res%L(l)%a,P,S)
+            !phi is computed from recursive forms from Brookhaven 2018 Table D.1 w/ a different value of rho
+            phi = Phi_hard(l-1,k*res%L(l)%ap)
+        End If
+        One_m_Cos2phi = 1._dp - Cos(phi)
+        Exp_m2iphi = Exp( CMPLX(0._dp,-2._dp*phi,Kind=dp) )
+        Do sp = res%s(1),res%s(2)
+            Do J = Abs(l-1-sp),l-1+sp
+                ImK = z0
+                Do r = 1,res%L(l)%n_r
+                !ASSOCIATE construct creates short-hand variable names for the duration of the block
+                ASSOCIATE ( Er  => res%L(l)%EraG(r,1), & !resonance energy
+                            & Gnr => res%L(l)%EraG(r,3), & !neutron width at resonance energy
+                            & Ggr => res%L(l)%EraG(r,4), & !radiation width
+                            & Pr  => res%L(l)%EraG(r,6)  ) !penetration factor at resonance energy
+                    Gn = P * Gnr / Pr !neutron width, Brookhaven 2018 eq D.7
+                    ImK = ImK + ( z1 - half_i * CMPLX(Gn,Kind=dp) / (CMPLX(Er-E_eV,Kind=dp) - half_i*CMPLX(Ggr,Kind=dp)) )
+                End ASSOCIATE
+                End Do !r
+                U = Exp_m2iphi * (z2 * (z1/ImK) - z1)
+                gJ = Real(2*J + 1,dp) / Real(4*res%s(2),dp)
+                sT = sT + gJ * Real(z1 - U)
+                sS = sS + gJ * Abs(z1 - U)**2
+            End Do !J
+        End Do !sp
         !finish multiplying in scaling factors
         sT = TwoPi * sT / k**2
         sS = TwoPi * sS / k**2
     Else If (res%is_BW) Then
-        Do l = 1,res%n_L !Performs the sum for Brookhaven 2018 eq D.1
-            If (res%L(l)%a .EQ. res%L(l)%ap) Then
-                !S,P,phi are computed from recursive forms from Brookhaven 2018 Table D.1
-                Call PSphi(l-1,k*res%L(l)%a,P,S,phi)
-            Else
-                !S,P are computed from recursive forms from Brookhaven 2018 Table D.1
-                Call PSphi(l-1,k*res%L(l)%a,P,S)
-                !phi is computed from recursive forms from Brookhaven 2018 Table D.1 w/ a different value of rho
-                phi = Phi_hard(l-1,k*res%L(l)%ap)
-            End If
-            Sin_sq_phi = Sin(phi)**2
-            sS = sS + Real(8*(l-1)+1,dp) * Sin_sq_phi !first term of Brookhaven 2018 eq D.2
-            Do r = 1,res%L(l)%n_r !performs the double sum for Brookhaven 2018 eqs D.2 (w/ D.16 for MLBW) and D.4
-            !ASSOCIATE construct creates short-hand variable names for the duration of the block
-            ASSOCIATE ( Er  => res%L(l)%ErgG(r,1), & !resonance energy
-                      & gJ  => res%L(l)%ErgG(r,2), & !statistical factor
-                      & Gtr => res%L(l)%ErgG(r,3), & !total width at resonance energy
-                      & Gnr => res%L(l)%ErgG(r,4), & !neutron width at resonance energy
-                      & Ggr => res%L(l)%ErgG(r,5), & !radiation width
-                      & Sr  => res%L(l)%ErgG(r,6), & !shift factor at resonance energy
-                      & Pr  => res%L(l)%ErgG(r,7)  ) !penetration factor at resonance energy
+        Jmin = Abs(Abs(res%spi - Real(l,dp)) - 0.5_dp)
+        Jmax = res%spi + Real(l,dp) + 0.5_dp
+        nJ = NINT(Jmax-Jmin) + 1
+        Do j = 1,nJ
+            Jval = Jmin + Real(j-1,dp)
+            gJ = 0.5_dp * (2._dp * Jval + 1._dp) / (2._dp * res%spi + 1._dp)
+            Do r = 1,res%L(l)%n_r
+                If (res%L(l)%EraG(r,2) .NE. Jval) Cycle
+                !ASSOCIATE construct creates short-hand variable names for the duration of the block
+                ASSOCIATE ( Er  => res%L(l)%EraG(r,1), & !resonance energy
+                            & Gtr => res%L(l)%EraG(r,3), & !total width at resonance energy
+                            & Gnr => res%L(l)%EraG(r,4), & !neutron width at resonance energy
+                            & Ggr => res%L(l)%EraG(r,5), & !radiation width
+                            & Sr  => res%L(l)%EraG(r,6), & !shift factor at resonance energy
+                            & Pr  => res%L(l)%EraG(r,7)  ) !penetration factor at resonance energy
                 Gn = P * Gnr / Pr !neutron width, Brookhaven 2018 eq D.7
                 Epr = Er + Gnr * (Sr - S) / (2._dp * Pr) !Primed resonance energy, Brookhaven 2018 eq D.9
                 Gxr = Gtr - Gnr - Ggr !competitive width, Brookhaven 2018 eq D.8
                 Gt = Gn + Ggr + Gxr !total width, Brookhaven 2018 eq p.340 (between D.7 and D.8)
-                c = gJ / ((E_eV - Epr)**2 + 0.25_dp * Gt**2) !precomputed value
-                sS = sS + c*( Gn**2 - 2._dp*(Gn*Gt*Sin_sq_phi + (E_eV-Epr)*Gn*Sin(2._dp*phi)) ) !sum term for Brookhaven 2018 eq D.2
-                If (res%is_MLBW) Then !the sum from Brookhaven 2018 eq D.2 must include Brookhaven 2018 eq D.16
-                    G = 0._dp
-                    H = 0._dp
-                    Do rr = 1,res%L(l)%n_r !performs the sums for Brookhaven 2018 eq D.17 and D.18
-                        If (rr .EQ. r) Cycle
-                    !ASSOCIATE construct creates short-hand variable names for the duration of the block
-                    ASSOCIATE ( Erp  => res%L(l)%ErgG(rr,1), & !resonance r-prime energy
-                              & Gtrp => res%L(l)%ErgG(rr,3), & !total width at resonance r-prime energy
-                              & Gnrp => res%L(l)%ErgG(rr,4), & !neutron width at resonance r-prime energy
-                              & Ggrp => res%L(l)%ErgG(rr,5), & !radiation width at resonance r-prime
-                              & Srp  => res%L(l)%ErgG(rr,6), & !shift factor at at resonance r-prime energy
-                              & Prp  => res%L(l)%ErgG(rr,7)  ) !penetration factor at at resonance r-prime energy
-                        Gnp = P * Gnrp / Prp !neutron width at resonance r-prime
-                        Eprp = Erp + Gnrp * (Srp - S) / (2._dp * Prp) !Primed resonance energy at resonance r-prime
-                        Gxrp = Gtrp - Gnrp - Ggrp !competitive width at resonance r-prime
-                        Gtp = Gnp + Ggrp + Gxrp !total width at resonance r-prime
-                        cc = Gn * Gnp / ( (Epr - Eprp)**2 + 0.25_dp*(Gt + Gtp)**2 ) !precomputed value
-                        G = G + cc * (Gt + Gtp) !sum term for Brookhaven 2018 eq D.17
-                        H = H + cc * (Er - Erp) !sum term for Brookhaven 2018 eq D.18
-                    End ASSOCIATE
-                    End Do
-                    sS = sS + c*( 0.5_dp * G * Gt + 2._dp * H * (E_eV-Er) ) !sum term for Brookhaven 2018 eq D.16
+                c = gJ * Gn / ((E_eV - Epr)**2 + 0.25_dp * Gt**2) !precomputed value
+                sA = sA + c * Ggr !sum term for Brookhaven 2018 eq D.4
+                If (res%is_SLBW) Then
+                    sS = sS + c * ( Gn - 2._dp*(Gt*Sin_sq_phi + (E_eV-Epr)*Sin_2phi) ) !sum term for Brookhaven 2018 eq D.2
+                Else !if(res%is_MLBW) Then
+                    U = Exp_m2iphi * & !Brookhaven 2018 eq D.21
+                        & ( z1 + CMPLX(0._dp,Gn,Kind=dp) / (CMPLX(Epr-E_eV,Kind=dp) - CMPLX(0._dp,Gt,Kind=dp)) )
+                    sS = sS + gJ * Abs(z1 - U)**2 !sum term for Brookhaven 2018 eq D.20
                 End If
-                sA = sA + c * (Gn * Ggr) !!sum term for Brookhaven 2018 eq D.4
-            End ASSOCIATE
-            End Do
-        End Do
+                End ASSOCIATE
+            End Do !r
+        End Do !j
         !finish multiplying in scaling factors
         sS = Pi * sS / k**2
         sA = Pi * sA / k**2
         !compute total cross section
         sT = sS + sA
     End If
+    End Do !l
 End Subroutine sig_Resonance
 
 Pure Function sig_Composite(E,n_E,E_list,lnE_list,E_index,n1,n2,t_list,sig_list) Result(sig)
