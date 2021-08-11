@@ -2141,16 +2141,16 @@ Pure Subroutine sig_Resonance(res,E,sT,sS)
     Real(dp) :: E_eV  ![eV] energy in eV for local calcs
     Real(dp) :: k  ![1/m] neutron wave number
     Real(dp) :: sA
-    Real(dp) :: S,P,phi
+    Real(dp) :: Sh,Pe,phi
     Real(dp) :: Sin_sq_phi,One_m_Cos2phi,Sin_2phi
     Complex(dp) :: Exp_m2iphi
     Complex(dp) :: ImK,U
-    Integer :: l,r,j
+    Integer :: l,j,r
     Real(dp) :: gJ
-    Real(dp) :: Gn,Gnp
-    Real(dp) :: Epr,Eprp
-    Real(dp) :: Gxr,Gxrp
-    Real(dp) :: Gt,Gtp
+    Real(dp) :: Gn
+    Real(dp) :: Epr
+    Real(dp) :: Gxr
+    Real(dp) :: Gt
     Real(dp) :: c
     Real(dp) :: Jmin,Jmax,Jval
     Integer :: nJ
@@ -2170,26 +2170,42 @@ Pure Subroutine sig_Resonance(res,E,sT,sS)
                      !  eq D.1 and D.3 for SLBW
                      !  eq D.19 and D.3 for MLBW
                      !  eq D.30 and D.32 for RM
+    !Compute Shift, Penetrability, and phase shift
     If (res%L(l)%a .EQ. res%L(l)%ap) Then
-        !S,P,phi are computed from recursive forms from Brookhaven 2018 Table D.1
-        Call PSphi(l-1,k*res%L(l)%a,P,S,phi)
+        !Sh,Pe,phi are computed from recursive forms from Brookhaven 2018 Table D.1
+        Call PSphi(l-1,k*res%L(l)%a,Pe,Sh,phi)
     Else
-        !S,P are computed from recursive forms from Brookhaven 2018 Table D.1
-        Call PSphi(l-1,k*res%L(l)%a,P,S)
+        !Sh,Pe are computed from recursive forms from Brookhaven 2018 Table D.1
+        Call PSphi(l-1,k*res%L(l)%a,Pe,Sh)
         !phi is computed from recursive forms from Brookhaven 2018 Table D.1 w/ a different value of rho
         phi = Phi_hard(l-1,k*res%L(l)%ap)
     End If
-    If (res%is_SLBW) Then
-        Sin_sq_phi = Sin(phi)**2
-        Sin_2phi = Sin(2._dp*phi)
-        sS = sS + Real(4*(2*(l-1)+1),dp) * Sin_sq_phi !first term of Brookhaven 2018 eq D.2
-    Else !MLBW and RM
+    !set up loops and precompute/initialize values based on formalism
+    If (res%is_RM) Then
+        !sums run through s AND J
+        !UNDONE
+        !UNDONE
+        !UNDONE
+        Jmin = Abs(Abs(res%spi - Real(l,dp)) - 0.5_dp)
+        Jmax = res%spi + Real(l,dp) + 0.5_dp
+        nJ = NINT(Jmax-Jmin) + 1
+        !Initial and precomuted values depend formalism
         Exp_m2iphi = Exp( CMPLX(0._dp,-2._dp*phi,Kind=dp) )
-        If (res%is_RM) One_m_Cos2phi = 1._dp - Cos(phi)
+        One_m_Cos2phi = 1._dp - Cos(phi)
+    Else !If (res%is_BW) Then
+        !sums run through J
+        Jmin = Abs(Abs(res%spi - Real(l,dp)) - 0.5_dp)
+        Jmax = res%spi + Real(l,dp) + 0.5_dp
+        nJ = NINT(Jmax-Jmin) + 1
+        !Initial and precomuted values depend formalism
+        If (res%is_MLBW) Then
+            Exp_m2iphi = Exp( CMPLX(0._dp,-2._dp*phi,Kind=dp) )
+        Else !If (res%is_SLBW) Then
+            Sin_sq_phi = Sin(phi)**2
+            Sin_2phi = Sin(2._dp*phi)
+            sS = sS + Real(4*(2*(l-1)+1),dp) * Sin_sq_phi !first term of Brookhaven 2018 eq D.2
+        End If
     End If
-    Jmin = Abs(Abs(res%spi - Real(l,dp)) - 0.5_dp)
-    Jmax = res%spi + Real(l,dp) + 0.5_dp
-    nJ = NINT(Jmax-Jmin) + 1
     Do j = 1,nJ
     Jval = Jmin + Real(j-1,dp)
     gJ = (Jval + 0.5_dp) / (2._dp * res%spi + 1._dp)
@@ -2202,14 +2218,16 @@ Pure Subroutine sig_Resonance(res,E,sT,sS)
                       & Gnr => res%L(l)%EraG(r,3), & !neutron width at resonance energy
                       & Ggr => res%L(l)%EraG(r,4), & !radiation width
                       & Pr  => res%L(l)%EraG(r,6)  ) !penetration factor at resonance energy
-            Gn = P * Gnr / Pr !neutron width, Brookhaven 2018 eq D.7
-            ImK = ImK + CMPLX(0._dp,0.5_dp*Gn,Kind=dp) / (CMPLX(Er-E_eV,Kind=dp) - CMPLX(0._dp,0.5_dp*Ggr,Kind=dp))
+            Gn = Pe * Gnr / Pr !neutron width, Brookhaven 2018 eq D.7
+            ImK = ImK + & 
+                        CMPLX(0._dp,0.5_dp*Gn,Kind=dp) / & 
+                        ( CMPLX(Er-E_eV,Kind=dp) - CMPLX(0._dp,0.5_dp*Ggr,Kind=dp) ) !sum term for Brookhaven 2018 eq D.28
             End ASSOCIATE
         End Do !r
-        Imk = z1 - ImK
-        U = Exp_m2iphi * (z2/ImK - z1)
-        sT = sT + gJ * (1._dp - Real(U))
-        sS = sS + gJ * Abs(z1 - U)**2
+        Imk = z1 - ImK !Brookhaven 2018 eq D.28
+        U = Exp_m2iphi * (z2/ImK - z1) !Brookhaven 2018 eq D.27
+        sT = sT + gJ * (1._dp - Real(U)) !Brookhaven 2018 eq D.23
+        sS = sS + gJ * Abs(z1 - U)**2 !Brookhaven 2018 eq D.24
     Else If (res%is_BW) Then
         Do r = 1,res%L(l)%n_r
             If (res%L(l)%EraG(r,2) .NE. Jval) Cycle
@@ -2220,8 +2238,8 @@ Pure Subroutine sig_Resonance(res,E,sT,sS)
                       & Ggr => res%L(l)%EraG(r,5), & !radiation width
                       & Sr  => res%L(l)%EraG(r,6), & !shift factor at resonance energy
                       & Pr  => res%L(l)%EraG(r,7)  ) !penetration factor at resonance energy
-            Gn = P * Gnr / Pr !neutron width, Brookhaven 2018 eq D.7
-            Epr = Er + Gnr * (Sr - S) / (2._dp * Pr) !Primed resonance energy, Brookhaven 2018 eq D.9
+            Gn = Pe * Gnr / Pr !neutron width, Brookhaven 2018 eq D.7
+            Epr = Er + Gnr * (Sr - Sh) / (2._dp * Pr) !Primed resonance energy, Brookhaven 2018 eq D.9
             Gxr = Gtr - Gnr - Ggr !competitive width, Brookhaven 2018 eq D.8
             Gt = Gn + Ggr + Gxr !total width, Brookhaven 2018 eq p.340 (between D.7 and D.8)
             c = gJ * Gn / ((E_eV - Epr)**2 + 0.25_dp * Gt**2) !precomputed value
@@ -2240,6 +2258,9 @@ Pure Subroutine sig_Resonance(res,E,sT,sS)
     End Do !l
     !finish multiplying in scaling factors
     If (res%is_BW) Then
+        If (res%is_SLBW) Then
+            If (sS .LE. 0._dp) sS = Tiny(sS) !if SLBW returns negative cross section, set to tiny positive value instead
+        End If
         sS = Pi * sS / k**2
         sA = Pi * sA / k**2
         sT = sS + sA
