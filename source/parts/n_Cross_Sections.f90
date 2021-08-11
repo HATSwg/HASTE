@@ -260,7 +260,7 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
     Real(dp) :: trash_r
     Logical :: v,first_time
     Character(15) :: v_string
-    Real(dp) :: sT,sA,En
+    Real(dp) :: En
 
     NameList /csSetupList1/ n_elements
     NameList /csSetupList2/ el_fractions,n_isotopes
@@ -923,23 +923,38 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
         Write(v_unit,'(A)') half_dash_line
         Write(v_unit,*)
 
-        Do i = 1,6
-            En = 1.E-4_dp
-            Write(*,*) i
-            Do j = 1,9
-                Write(*,*) En , CS%sig_T(i,En) , CS%sig_S(i,En) , CS%sig_A(i,En)
-                En = En * 10._dp
+        Write(v_unit,'(A9,4A27)',ADVANCE='NO') ' Index ',' E [keV]                ',' Atmo sig-T [barns]     ', & 
+                                             &           ' Atmo sig-S [barns]     ',' Atmo sig-A [barns]     '
+        Do k = 1,CS%n_iso
+            Write(v_unit,'(3A27)',ADVANCE='NO') ' '//isotope_names(k)//' sig-T [barns]     ', & 
+                                              & ' '//isotope_names(k)//' sig-S [barns]     ', & 
+                                              & ' '//isotope_names(k)//' sig-A [barns]     '
+        End Do
+        Write(v_unit,*)
+        Write(v_unit,'(A9,4A27)',ADVANCE='NO') '-------','------------------------','------------------------', & 
+                                             & '------------------------','------------------------'
+        Do k = 1,CS%n_iso
+            Write(v_unit,'(3A27)',ADVANCE='NO') '------------------------','------------------------','------------------------'
+        End Do
+        Write(v_unit,*)
+        Do i = 1,CS%n_E_uni-1
+            Do j = 0,4
+                En = CS%E_uni(i) + Real(j,dp) * (CS%E_uni(i+1)-CS%E_uni(i)) / 4._dp
+                If (j .EQ. 0) Then
+                    Write(v_unit,'(I9)',ADVANCE='NO') i
+                Else If (j .EQ. 4) Then
+                    Write(v_unit,'(I9)',ADVANCE='NO') i + 1
+                Else
+                    Write(v_unit,'(A9)',ADVANCE='NO') ''
+                End If
+                Write(v_unit,'(4ES27.16E3)',ADVANCE='NO') En , CS%sig_T(En) , CS%sig_S(En) , CS%sig_A(En)
+                Do k = 1,CS%n_iso
+                    Write(v_unit,'(3ES27.16E3)',ADVANCE='NO') CS%sig_T(k,En) , CS%sig_S(k,En) , CS%sig_A(k,En)
+                End Do
+                Write(v_unit,*)
+                If (j.EQ.3 .AND. i.LT.CS%n_E_uni-1) Exit
             End Do
         End Do
-        !UNDONE
-        ! Do i = 1,CS%n_E_uni
-        !     Print*,CS%E_uni(i)
-        !     Call CS%sig_T_A(CS%E_uni(i),sT,sA)
-        !     Write(v_unit,'(3ES27.16E3)') CS%E_uni(i),sT,sA
-        ! End Do
-        !UNDONE
-        !UNDONE
-        !UNDONE
         Close(v_unit)
     End If
 End Function Setup_Cross_Sections
@@ -2296,7 +2311,7 @@ Pure Function sig_Composite(E,n_E,E_list,lnE_list,E_index,n1,n2,t_list,sig_list)
     Integer :: i,j
     Integer :: index1,index2
     Real(dp) :: E1,E2
-    Real(dp) :: sig1,sig2
+    Real(dp) :: sig1,sig2,sig_n
     Integer :: method
     Integer, Parameter :: Hist_interpolation   = 1  !y is constant in x (constant, histogram)
     Integer, Parameter :: LinLin_interpolation = 2  !y is linear in x (linear-linear)
@@ -2319,34 +2334,33 @@ Pure Function sig_Composite(E,n_E,E_list,lnE_list,E_index,n1,n2,t_list,sig_list)
         End Do
         Select Case (method)
             Case(Hist_interpolation)
-                sig = sig + sig_list(i)%sig( index1 )
+                sig_n = sig_list(i)%sig( index1 )
             Case(LinLin_interpolation)
                 E1 = E_list( sig_list(i)%E_key( index1 ) )
                 E2 = E_list( sig_list(i)%E_key( index2 ) )
                 sig1 = sig_list(i)%sig( index1 )
                 sig2 = sig_list(i)%sig( index2 )
-                sig = sig + Linear_Interp(E,E1,E2,sig1,sig2)
+                sig_n = Linear_Interp(E,E1,E2,sig1,sig2)
             Case(LinLog_interpolation)
                 E1 = lnE_list( sig_list(i)%E_key( index1 ) )
                 E2 = lnE_list( sig_list(i)%E_key( index2 ) )
                 sig1 = sig_list(i)%sig( index1 )
                 sig2 = sig_list(i)%sig( index2 )
-                sig = sig + Linear_Interp(Log(E),E1,E2,sig1,sig2)
+                sig_n = Linear_Interp(Log(E),E1,E2,sig1,sig2)
             Case(LogLin_interpolation)
                 E1 = E_list( sig_list(i)%E_key( index1 ) )
                 E2 = E_list( sig_list(i)%E_key( index2 ) )
                 sig1 = sig_list(i)%lnsig( index1 )
                 sig2 = sig_list(i)%lnsig( index2 )
-                sig = sig + Exp(Linear_Interp(E,E1,E2,sig1,sig2))
+                sig_n = Exp(Linear_Interp(E,E1,E2,sig1,sig2))
             Case(LogLog_interpolation)
                 E1 = lnE_list( sig_list(i)%E_key( index1 ) )
                 E2 = lnE_list( sig_list(i)%E_key( index2 ) )
                 sig1 = sig_list(i)%lnsig( index1 )
                 sig2 = sig_list(i)%lnsig( index2 )
-                sig = sig + Exp(Linear_Interp(Log(E),E1,E2,sig1,sig2))
-!            Case Default
-!                Call Output_Message('ERROR:  Cross_Sections: sig_Composite:  Undefined interpolation method',kill=.TRUE.)
+                sig_n = Exp(Linear_Interp(Log(E),E1,E2,sig1,sig2))
         End Select
+        If (sig_n .GT. 0._dp) sig = sig + sig_n
         i = i + 1
         If (i .GT. n2) Exit
     End Do
