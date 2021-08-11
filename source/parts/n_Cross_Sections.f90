@@ -2144,16 +2144,17 @@ Pure Subroutine sig_Resonance(res,E,sT,sS)
     Real(dp) :: Sh,Pe,phi
     Real(dp) :: Sin_sq_phi,One_m_Cos2phi,Sin_2phi
     Complex(dp) :: Exp_m2iphi
-    Complex(dp) :: ImK,U
-    Integer :: l,j,r
+    Complex(dp) :: ImK,rho,U
+    Integer :: l,s,j,r
     Real(dp) :: gJ
     Real(dp) :: Gn
     Real(dp) :: Epr
     Real(dp) :: Gxr
     Real(dp) :: Gt
     Real(dp) :: c
+    Real(dp) :: Smin,Smax,Sval
     Real(dp) :: Jmin,Jmax,Jval
-    Integer :: nJ
+    Integer :: nS,nJ
     Complex(dp), Parameter :: z0 = CMPLX(0._dp,Kind=dp)
     Complex(dp), Parameter :: z1 = CMPLX(1._dp,Kind=dp)
     Complex(dp), Parameter :: z2 = CMPLX(2._dp,Kind=dp)
@@ -2183,15 +2184,12 @@ Pure Subroutine sig_Resonance(res,E,sT,sS)
     !set up loops and precompute/initialize values based on formalism
     If (res%is_RM) Then
         !sums run through s AND J
-        !UNDONE
-        !UNDONE
-        !UNDONE
-        Jmin = Abs(Abs(res%spi - Real(l,dp)) - 0.5_dp)
-        Jmax = res%spi + Real(l,dp) + 0.5_dp
-        nJ = NINT(Jmax-Jmin) + 1
+        Smin = Abs(res%spi - 0.5_dp)
+        Smax = res%spi + 0.5_dp
+        nS = NINT(Smax-Smin) + 1
         !Initial and precomuted values depend formalism
         Exp_m2iphi = Exp( CMPLX(0._dp,-2._dp*phi,Kind=dp) )
-        One_m_Cos2phi = 1._dp - Cos(phi)
+        One_m_Cos2phi = 1._dp - Cos(2._dp*phi)
     Else !If (res%is_BW) Then
         !sums run through J
         Jmin = Abs(Abs(res%spi - Real(l,dp)) - 0.5_dp)
@@ -2206,55 +2204,66 @@ Pure Subroutine sig_Resonance(res,E,sT,sS)
             sS = sS + Real(4*(2*(l-1)+1),dp) * Sin_sq_phi !first term of Brookhaven 2018 eq D.2
         End If
     End If
-    Do j = 1,nJ
-    Jval = Jmin + Real(j-1,dp)
-    gJ = (Jval + 0.5_dp) / (2._dp * res%spi + 1._dp)
     If (res%is_RM) Then
-        ImK = z0
-        Do r = 1,res%L(l)%n_r
-            If (res%L(l)%EraG(r,2) .NE. Jval) Cycle
-            !ASSOCIATE construct creates short-hand variable names for the duration of the block
-            ASSOCIATE ( Er  => res%L(l)%EraG(r,1), & !resonance energy
-                      & Gnr => res%L(l)%EraG(r,3), & !neutron width at resonance energy
-                      & Ggr => res%L(l)%EraG(r,4), & !radiation width
-                      & Pr  => res%L(l)%EraG(r,6)  ) !penetration factor at resonance energy
-            Gn = Pe * Gnr / Pr !neutron width, Brookhaven 2018 eq D.7
-            ImK = ImK + & 
-                        CMPLX(0._dp,0.5_dp*Gn,Kind=dp) / & 
-                        ( CMPLX(Er-E_eV,Kind=dp) - CMPLX(0._dp,0.5_dp*Ggr,Kind=dp) ) !sum term for Brookhaven 2018 eq D.28
-            End ASSOCIATE
-        End Do !r
-        Imk = z1 - ImK !Brookhaven 2018 eq D.28
-        U = Exp_m2iphi * (z2/ImK - z1) !Brookhaven 2018 eq D.27
-        sT = sT + gJ * (1._dp - Real(U)) !Brookhaven 2018 eq D.23
-        sS = sS + gJ * Abs(z1 - U)**2 !Brookhaven 2018 eq D.24
+        Do s = 1,nS
+            Sval = Smin + Real(s-1,dp)
+            Jmin = Abs( Real(l-1,dp) - Sval )
+            Jmax = Real(l-1,dp) + Sval
+            nJ = NINT(Jmax-Jmin) + 1
+            Do j = 1,nJ
+                Jval = Jmin + Real(j-1,dp)
+                gJ = (Jval + 0.5_dp) / (2._dp * res%spi + 1._dp)
+                ImK = z0
+                Do r = 1,res%L(l)%n_r
+                    If (res%L(l)%EraG(r,2) .NE. Jval) Cycle
+                    !ASSOCIATE construct creates short-hand variable names for the duration of the block
+                    ASSOCIATE ( Er  => res%L(l)%EraG(r,1), & !resonance energy
+                              & Gnr => res%L(l)%EraG(r,3), & !neutron width at resonance energy
+                              & Ggr => res%L(l)%EraG(r,4), & !radiation width
+                              & Pr  => res%L(l)%EraG(r,6)  ) !penetration factor at resonance energy
+                    Gn = Pe * Gnr / Pr !neutron width, Brookhaven 2018 eq D.7
+                    ImK = ImK + & !sum term for Brookhaven 2018 eq D.28
+                                & CMPLX(0._dp,0.5_dp*Gn,Kind=dp) / ( CMPLX(Er-E_eV,Kind=dp) - CMPLX(0._dp,0.5_dp*Ggr,Kind=dp) ) 
+                    End ASSOCIATE
+                End Do !r
+                Imk = z1 - ImK !Brookhaven 2018 eq D.28
+                !HACK The following implementation of Brookhaven eqs D.29 - D.31 is caoutioned against due to numerical stability
+                rho = z1 - z1/ImK !Brookhaven 2018 eq D.29
+                c = One_m_Cos2phi + 2._dp * Real(Exp_m2iphi * rho) !precomputed quantity
+                sT = sT + gJ * c !Brookhaven 2018 eq D.30
+                sS = sS + gJ * ( c + 2._dp * (Abs(rho)**2 - Real(rho)) ) !Brookhaven 2018 eq D.31
+            End Do !j
+        End Do !s
     Else If (res%is_BW) Then
-        Do r = 1,res%L(l)%n_r
-            If (res%L(l)%EraG(r,2) .NE. Jval) Cycle
-            !ASSOCIATE construct creates short-hand variable names for the duration of the block
-            ASSOCIATE ( Er  => res%L(l)%EraG(r,1), & !resonance energy
-                      & Gtr => res%L(l)%EraG(r,3), & !total width at resonance energy
-                      & Gnr => res%L(l)%EraG(r,4), & !neutron width at resonance energy
-                      & Ggr => res%L(l)%EraG(r,5), & !radiation width
-                      & Sr  => res%L(l)%EraG(r,6), & !shift factor at resonance energy
-                      & Pr  => res%L(l)%EraG(r,7)  ) !penetration factor at resonance energy
-            Gn = Pe * Gnr / Pr !neutron width, Brookhaven 2018 eq D.7
-            Epr = Er + Gnr * (Sr - Sh) / (2._dp * Pr) !Primed resonance energy, Brookhaven 2018 eq D.9
-            Gxr = Gtr - Gnr - Ggr !competitive width, Brookhaven 2018 eq D.8
-            Gt = Gn + Ggr + Gxr !total width, Brookhaven 2018 eq p.340 (between D.7 and D.8)
-            c = gJ * Gn / ((E_eV - Epr)**2 + 0.25_dp * Gt**2) !precomputed value
-            sA = sA + c * Ggr !sum term for Brookhaven 2018 eq D.4
-            If (res%is_SLBW) Then
-                sS = sS + c * ( Gn - 2._dp*(Gt*Sin_sq_phi + (E_eV-Epr)*Sin_2phi) ) !sum term for Brookhaven 2018 eq D.2
-            Else !if(res%is_MLBW) Then
-                U = Exp_m2iphi * & !Brookhaven 2018 eq D.21
-                    & ( z1 + CMPLX(0._dp,Gn,Kind=dp) / (CMPLX(Epr-E_eV,Kind=dp) - CMPLX(0._dp,0.5_dp*Gt,Kind=dp)) )
-                sS = sS + gJ * Abs(z1 - U)**2 !sum term for Brookhaven 2018 eq D.20
-            End If
-            End ASSOCIATE
-        End Do !r
+        Do j = 1,nJ
+            Jval = Jmin + Real(j-1,dp)
+            gJ = (Jval + 0.5_dp) / (2._dp * res%spi + 1._dp)
+            Do r = 1,res%L(l)%n_r
+                If (res%L(l)%EraG(r,2) .NE. Jval) Cycle
+                !ASSOCIATE construct creates short-hand variable names for the duration of the block
+                ASSOCIATE ( Er  => res%L(l)%EraG(r,1), & !resonance energy
+                          & Gtr => res%L(l)%EraG(r,3), & !total width at resonance energy
+                          & Gnr => res%L(l)%EraG(r,4), & !neutron width at resonance energy
+                          & Ggr => res%L(l)%EraG(r,5), & !radiation width
+                          & Sr  => res%L(l)%EraG(r,6), & !shift factor at resonance energy
+                          & Pr  => res%L(l)%EraG(r,7)  ) !penetration factor at resonance energy
+                Gn = Pe * Gnr / Pr !neutron width, Brookhaven 2018 eq D.7
+                Epr = Er + Gnr * (Sr - Sh) / (2._dp * Pr) !Primed resonance energy, Brookhaven 2018 eq D.9
+                Gxr = Gtr - Gnr - Ggr !competitive width, Brookhaven 2018 eq D.8
+                Gt = Gn + Ggr + Gxr !total width, Brookhaven 2018 eq p.340 (between D.7 and D.8)
+                c = gJ * Gn / ((E_eV - Epr)**2 + 0.25_dp * Gt**2) !precomputed value
+                sA = sA + c * Ggr !sum term for Brookhaven 2018 eq D.4
+                If (res%is_SLBW) Then
+                    sS = sS + c * ( Gn - 2._dp*(Gt*Sin_sq_phi + (E_eV-Epr)*Sin_2phi) ) !sum term for Brookhaven 2018 eq D.2
+                Else !if(res%is_MLBW) Then
+                    U = Exp_m2iphi * & !Brookhaven 2018 eq D.21
+                        & ( z1 + CMPLX(0._dp,Gn,Kind=dp) / (CMPLX(Epr-E_eV,Kind=dp) - CMPLX(0._dp,0.5_dp*Gt,Kind=dp)) )
+                    sS = sS + gJ * Abs(z1 - U)**2 !sum term for Brookhaven 2018 eq D.20
+                End If
+                End ASSOCIATE
+            End Do !r
+        End Do !j
     End If
-    End Do !j
     End Do !l
     !finish multiplying in scaling factors
     If (res%is_BW) Then
