@@ -14,7 +14,7 @@ CS = Setup_Cross_Sections( &
                            & cs_setup_file = 'n_CS_setup_All.txt', & 
                            & elastic_only = .FALSE., & 
                            & aniso_dist = .TRUE., & 
-                           & E_min = 0._dp , E_max = 30000._dp, &
+                           & E_min = 0._dp , E_max = 20000._dp, &
                            & verbose = .TRUE.)
 
 End Program testCS

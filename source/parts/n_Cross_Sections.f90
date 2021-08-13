@@ -248,7 +248,7 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
     Real(dp), Allocatable :: sig_scratch(:)
     Integer, Allocatable :: Interp_scratch(:,:)
     Type(da_List_type), Allocatable :: Ang_Dist_scratch(:)
-    Integer :: setup_unit,ENDF_unit,v_unit,stat
+    Integer :: setup_unit,ENDF_unit,v_unit,t_unit,stat
     Integer, Allocatable :: n_abs_modes(:),n_inel_lev(:)
     Integer, Allocatable :: abs_modes(:,:),inel_levs(:,:),inel_da_mf(:,:)
     Real(dp), Allocatable :: abs_thresh(:,:),inel_thresh(:,:)
@@ -260,7 +260,10 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
     Real(dp) :: trash_r
     Logical :: v,first_time
     Character(15) :: v_string
-    Real(dp) :: En
+    Real(dp) :: En,sT,sS,sA
+    Integer :: inter_pts
+    Logical :: skip_section
+    Real(dp) :: thresh
 
     NameList /csSetupList1/ n_elements
     NameList /csSetupList2/ el_fractions,n_isotopes
@@ -306,10 +309,13 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
     Allocate(CS%has_res_cs(1:CS%n_iso))
     CS%has_res_cs = .FALSE.
     Allocate(CS%res_cs(1:CS%n_iso))
-    If (v) Then  !create a  file for verbose output
+    If (v) Then  !create files for verbose output
         Open(NEWUNIT = v_unit , FILE = 'n_cs_HASTE_summary.txt' , STATUS = 'REPLACE' , ACTION = 'WRITE' , IOSTAT = stat)
         If (stat .NE. 0) Call Output_Message( 'ERROR:  Cross_Sections: Setup_Cross_Sections:  File open error, ' & 
                                             & //'n_cs_HASTE_summary.txt'//', IOSTAT=',stat,kill=.TRUE. )
+        Open(NEWUNIT = t_unit , FILE = 'n_cs_HASTE_summary_traces.txt' , STATUS = 'REPLACE' , ACTION = 'WRITE' , IOSTAT = stat)
+        If (stat .NE. 0) Call Output_Message( 'ERROR:  Cross_Sections: Setup_Cross_Sections:  File open error, ' & 
+                                            & //'n_cs_HASTE_summary_traces.txt'//', IOSTAT=',stat,kill=.TRUE. )
     End If
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     !!  CREATE A UNIFIED ENERGY LIST FOR THE CROSS SECTION DATA
@@ -358,7 +364,7 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
             Open(NEWUNIT = ENDF_unit , FILE = ENDF_file_name , STATUS = 'OLD' , ACTION = 'READ' , IOSTAT = stat)
             If (stat .NE. 0) Call Output_Message( 'ERROR:  Cross_Sections: Setup_Cross_Sections:  File open error, ' & 
                                                 & //ENDF_file_name//', IOSTAT=',stat,kill=.TRUE. )
-            !count energies in absorption, elastic, and inelastic files (MFs 3 and 4)
+            !count energies in absorption, elastic, and inelastic files (MFs 3, 4, and 6)
             If (first_time .AND. v) v_string = Trim(isotope_names(i))//' ENDF file:'  !FIRST TIME
             DO_SECTIONS: Do
                 !check next section type
@@ -375,9 +381,24 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
                     v_string = ''
                 End If
                 If (MF.EQ.3 .OR. MF.EQ.4 .OR. MF.EQ.6) Then
+                    skip_section = .FALSE.
                     If ( Any(MT_excluded .EQ. MT) .OR. & 
                        & (MF.EQ.6 .AND. Any(MT_disappearance.EQ.MT)) ) Then !this type/file is excluded, advance past it
                         If (first_time .AND. v) Write(v_unit,'(A)',ADVANCE='YES') ' - excluded'  !FIRST TIME
+                        skip_section = .TRUE.
+                    Else If (MF .EQ. 3) Then !also need to check if range of energies has values between (E_min,E_max)
+                        Read(ENDF_unit,*)
+                        Read(ENDF_unit,*)
+                        Read(ENDF_unit,'(E11.6E1)') thresh
+                        Backspace(ENDF_unit)
+                        Backspace(ENDF_unit)
+                        Backspace(ENDF_unit)
+                        If (thresh/1000._dp .GE. E_max) Then !energy out of range
+                            If (first_time .AND. v) Write(v_unit,'(A)',ADVANCE='YES') ' - E out of range'  !FIRST TIME
+                            skip_section = .TRUE.
+                        End If
+                    End If
+                    If (skip_section) Then
                         !advance to end of section
                         Call Find_MFMT_end(ENDF_unit)
                         !cycle to start next section
@@ -385,7 +406,7 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
                     Else
                         If (first_time .AND. v) Write(v_unit,'(A)',ADVANCE='NO') ' - counted'  !FIRST TIME
                     End If
-                    !get number of energies in this MF 3 or 4 section
+                    !get number of energies in this MF 3, 4, or 6 section
                     Select Case (MF)
                         Case (3)
                             If (first_time) Then  !FIRST TIME
@@ -937,25 +958,36 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
             Write(v_unit,'(3A27)',ADVANCE='NO') '------------------------','------------------------','------------------------'
         End Do
         Write(v_unit,*)
+        inter_pts = 5
         Do i = 1,CS%n_E_uni-1
-            Do j = 0,4
-                En = CS%E_uni(i) + Real(j,dp) * (CS%E_uni(i+1)-CS%E_uni(i)) / 4._dp
+            Do j = 0,inter_pts+1
+                En = CS%E_uni(i) + Real(j,dp) * (CS%E_uni(i+1)-CS%E_uni(i)) / Real(inter_pts+1,dp)
                 If (j .EQ. 0) Then
                     Write(v_unit,'(I9)',ADVANCE='NO') i
-                Else If (j .EQ. 4) Then
+                Else If (j .EQ. inter_pts+1) Then
                     Write(v_unit,'(I9)',ADVANCE='NO') i + 1
                 Else
                     Write(v_unit,'(A9)',ADVANCE='NO') ''
                 End If
-                Write(v_unit,'(4ES27.16E3)',ADVANCE='NO') En , CS%sig_T(En) , CS%sig_S(En) , CS%sig_A(En)
+                sT = CS%sig_T(En)
+                sS = CS%sig_S(En)
+                sA = CS%sig_A(En)
+                Write(v_unit,'(4ES27.16E3)',ADVANCE='NO') En , sT , sS , sA
+                Write(t_unit,'(4ES27.16E3)',ADVANCE='NO') En , sT , sS , sA
                 Do k = 1,CS%n_iso
-                    Write(v_unit,'(3ES27.16E3)',ADVANCE='NO') CS%sig_T(k,En) , CS%sig_S(k,En) , CS%sig_A(k,En)
+                    sT = CS%sig_T(k,En)
+                    sS = CS%sig_S(k,En)
+                    sA = CS%sig_A(k,En)
+                    Write(v_unit,'(3ES27.16E3)',ADVANCE='NO') sT , sS , sA
+                    Write(t_unit,'(3ES27.16E3)',ADVANCE='NO') sT , sS , sA
                 End Do
                 Write(v_unit,*)
-                If (j.EQ.3 .AND. i.LT.CS%n_E_uni-1) Exit
+                Write(t_unit,*)
+                If (j.EQ.inter_pts .AND. i.LT.CS%n_E_uni-1) Exit
             End Do
         End Do
         Close(v_unit)
+        Close(t_unit)
     End If
 End Function Setup_Cross_Sections
 
@@ -1813,7 +1845,7 @@ Subroutine Map_and_Store_AD(n_E_uni,E_uni,n_p,E_list,AD_list,ad,i_thresh)
         ad%E_map(i) = j
         Do !increment the index past any equal or duplicate points
             If (E_uni(i) .EQ. E_list(j)) j = j + 1
-            If (j .GT. n_p) Exit
+            If (j .GE. n_p) Exit
             If (E_uni(i) .NE. E_list(j)) Exit
         End Do
     End Do
@@ -1849,9 +1881,9 @@ Subroutine sig_T_A(CS,E,sT,sA,iE_get,iE_put)
     Integer :: i
 
     If (Present(iE_put)) Then
-        E_index = iE_put
+        E_index = Max(iE_put,2)
     Else
-        E_index = Bisection_Search(E,CS%E_uni,CS%n_E_uni)
+        E_index = Min(Bisection_Search(E,CS%E_uni,CS%n_E_uni),CS%n_E_uni)
     End If
     sS = 0._dp
     sA = 0._dp
@@ -1864,23 +1896,23 @@ Subroutine sig_T_A(CS,E,sT,sA,iE_get,iE_put)
         End If
         !background contribution
         sS = sS + CS%iso_Fractions(i) * sig_Composite( E, & 
-                                                     & CS%n_E_uni, & 
-                                                     & CS%E_uni, & 
-                                                     & CS%lnE_uni, & 
-                                                     & E_index, & 
-                                                     & 0, & 
-                                                     & CS%lev_cs(i)%n_lev, & 
+                                                     & CS%n_E_uni,          & 
+                                                     & CS%E_uni,            & 
+                                                     & CS%lnE_uni,          & 
+                                                     & E_index,             & 
+                                                     & 0,                   & 
+                                                     & CS%lev_cs(i)%n_lev,  & 
                                                      & CS%lev_cs(i)%thresh, & 
-                                                     & CS%lev_cs(i)%sig )
-        sA = sA + CS%iso_Fractions(i) * sig_Composite( E, & 
-                                                     & CS%n_E_uni, & 
-                                                     & CS%E_uni, & 
-                                                     & CS%lnE_uni, & 
-                                                     & E_index, & 
-                                                     & 1, & 
+                                                     & CS%lev_cs(i)%sig     )
+        sA = sA + CS%iso_Fractions(i) * sig_Composite( E,                    & 
+                                                     & CS%n_E_uni,           & 
+                                                     & CS%E_uni,             & 
+                                                     & CS%lnE_uni,           & 
+                                                     & E_index,              & 
+                                                     & 1,                    & 
                                                      & CS%abs_cs(i)%n_modes, & 
-                                                     & CS%abs_cs(i)%thresh, & 
-                                                     & CS%abs_cs(i)%sig )
+                                                     & CS%abs_cs(i)%thresh,  & 
+                                                     & CS%abs_cs(i)%sig      )
     End Do
     sT = sA + sS
     If (Present(iE_get)) iE_get = E_index
@@ -1902,9 +1934,9 @@ Function sig_T_all(CS,E,iE_get,iE_put) Result(sT)
     Integer :: i
 
     If (Present(iE_put)) Then
-        E_index = iE_put
+        E_index = Max(iE_put,2)
     Else
-        E_index = Bisection_Search(E,CS%E_uni,CS%n_E_uni)
+        E_index = Min(Bisection_Search(E,CS%E_uni,CS%n_E_uni),CS%n_E_uni)
     End If
     sS = 0._dp
     sA = 0._dp
@@ -1916,25 +1948,25 @@ Function sig_T_all(CS,E,iE_get,iE_put) Result(sT)
             sA = sA + CS%iso_fractions(i) * (resT - resS)
         End If
         !background contribution from scatter
-        sS = sS + CS%iso_Fractions(i) * sig_Composite( E, & 
-                                                     & CS%n_E_uni, & 
-                                                     & CS%E_uni, & 
-                                                     & CS%lnE_uni, & 
-                                                     & E_index, & 
-                                                     & 0, & 
-                                                     & CS%lev_cs(i)%n_lev, & 
+        sS = sS + CS%iso_Fractions(i) * sig_Composite( E,                   & 
+                                                     & CS%n_E_uni,          & 
+                                                     & CS%E_uni,            & 
+                                                     & CS%lnE_uni,          & 
+                                                     & E_index,             & 
+                                                     & 0,                   & 
+                                                     & CS%lev_cs(i)%n_lev,  & 
                                                      & CS%lev_cs(i)%thresh, & 
-                                                     & CS%lev_cs(i)%sig ) 
+                                                     & CS%lev_cs(i)%sig     ) 
         !background contribution from absorption
-        sA = sA + CS%iso_Fractions(i) * sig_Composite( E, & 
-                                                     & CS%n_E_uni, & 
-                                                     & CS%E_uni, & 
-                                                     & CS%lnE_uni, & 
-                                                     & E_index, & 
-                                                     & 1, & 
+        sA = sA + CS%iso_Fractions(i) * sig_Composite( E,                    & 
+                                                     & CS%n_E_uni,           & 
+                                                     & CS%E_uni,             & 
+                                                     & CS%lnE_uni,           & 
+                                                     & E_index,              & 
+                                                     & 1,                    & 
                                                      & CS%abs_cs(i)%n_modes, & 
-                                                     & CS%abs_cs(i)%thresh, & 
-                                                     & CS%abs_cs(i)%sig )
+                                                     & CS%abs_cs(i)%thresh,  & 
+                                                     & CS%abs_cs(i)%sig      )
     End Do
     sT = sA + sS
     If (Present(iE_get)) iE_get = E_index
@@ -1955,9 +1987,9 @@ Function sig_T_iso(CS,iso,E,iE_get,iE_put) Result(sT)
     Real(dp) :: resT,resS
 
     If (Present(iE_put)) Then
-        E_index = iE_put
+        E_index = Max(iE_put,2)
     Else
-        E_index = Bisection_Search(E,CS%E_uni,CS%n_E_uni)
+        E_index = Min(Bisection_Search(E,CS%E_uni,CS%n_E_uni),CS%n_E_uni)
     End If
     sT = 0._dp
     !resonant contribution
@@ -2003,9 +2035,9 @@ Function sig_S_all(CS,E,iE_get,iE_put) Result(sS)
     Real(dp) :: resT,resS
 
     If (Present(iE_put)) Then
-        E_index = iE_put
+        E_index = Max(iE_put,2)
     Else
-        E_index = Bisection_Search(E,CS%E_uni,CS%n_E_uni)
+        E_index = Min(Bisection_Search(E,CS%E_uni,CS%n_E_uni),CS%n_E_uni)
     End If
     sS = 0._dp
     Do i = 1,CS%n_iso
@@ -2015,15 +2047,15 @@ Function sig_S_all(CS,E,iE_get,iE_put) Result(sS)
             sS = sS + CS%iso_Fractions(i) * resS
         End If
         !background contribution
-        sS = sS + CS%iso_Fractions(i) * sig_Composite( E, & 
-                                                     & CS%n_E_uni, & 
-                                                     & CS%E_uni, & 
-                                                     & CS%lnE_uni, & 
-                                                     & E_index, & 
-                                                     & 0, & 
-                                                     & CS%lev_cs(i)%n_lev, & 
+        sS = sS + CS%iso_Fractions(i) * sig_Composite( E,                   & 
+                                                     & CS%n_E_uni,          & 
+                                                     & CS%E_uni,            & 
+                                                     & CS%lnE_uni,          & 
+                                                     & E_index,             & 
+                                                     & 0,                   & 
+                                                     & CS%lev_cs(i)%n_lev,  & 
                                                      & CS%lev_cs(i)%thresh, & 
-                                                     & CS%lev_cs(i)%sig )
+                                                     & CS%lev_cs(i)%sig     )
     End Do
     If (Present(iE_get)) iE_get = E_index
 End Function sig_S_all
@@ -2043,9 +2075,9 @@ Function sig_S_iso(CS,iso,E,iE_get,iE_put) Result(sS)
     Real(dp) :: resT,resS
 
     If (Present(iE_put)) Then
-        E_index = iE_put
+        E_index = Max(iE_put,2)
     Else
-        E_index = Bisection_Search(E,CS%E_uni,CS%n_E_uni)
+        E_index = Min(Bisection_Search(E,CS%E_uni,CS%n_E_uni),CS%n_E_uni)
     End If
     sS = 0._dp
     !resonant contribution
@@ -2054,15 +2086,15 @@ Function sig_S_iso(CS,iso,E,iE_get,iE_put) Result(sS)
         sS = sS + resS
     End If
     !background contribution
-    sS = sS + sig_Composite( E, & 
-                           & CS%n_E_uni, & 
-                           & CS%E_uni, & 
-                           & CS%lnE_uni, & 
-                           & E_index, & 
-                           & 0, & 
-                           & CS%lev_cs(iso)%n_lev, & 
+    sS = sS + sig_Composite( E,                     & 
+                           & CS%n_E_uni,            & 
+                           & CS%E_uni,              & 
+                           & CS%lnE_uni,            & 
+                           & E_index,               & 
+                           & 0,                     & 
+                           & CS%lev_cs(iso)%n_lev,  & 
                            & CS%lev_cs(iso)%thresh, & 
-                           & CS%lev_cs(iso)%sig )
+                           & CS%lev_cs(iso)%sig     )
     If (Present(iE_get)) iE_get = E_index
 End Function sig_S_iso
 
@@ -2081,9 +2113,9 @@ Function sig_A_all(CS,E,iE_get,iE_put) Result(sA)
     Real(dp) :: resT,resS
 
     If (Present(iE_put)) Then
-        E_index = iE_put
+        E_index = Max(iE_put,2)
     Else
-        E_index = Bisection_Search(E,CS%E_uni,CS%n_E_uni)
+        E_index = Min(Bisection_Search(E,CS%E_uni,CS%n_E_uni),CS%n_E_uni)
     End If
     sA = 0._dp
     Do i = 1,CS%n_iso
@@ -2093,15 +2125,15 @@ Function sig_A_all(CS,E,iE_get,iE_put) Result(sA)
             sA = sA + CS%iso_Fractions(i) * (resT - resS)
         End If
         !background contribution
-        sA = sA + CS%iso_Fractions(i) * sig_Composite( E, & 
-                                                     & CS%n_E_uni, & 
-                                                     & CS%E_uni, & 
-                                                     & CS%lnE_uni, & 
-                                                     & E_index, & 
-                                                     & 1, & 
+        sA = sA + CS%iso_Fractions(i) * sig_Composite( E,                    & 
+                                                     & CS%n_E_uni,           & 
+                                                     & CS%E_uni,             & 
+                                                     & CS%lnE_uni,           & 
+                                                     & E_index,              & 
+                                                     & 1,                    & 
                                                      & CS%abs_cs(i)%n_modes, & 
-                                                     & CS%abs_cs(i)%thresh, & 
-                                                     & CS%abs_cs(i)%sig )
+                                                     & CS%abs_cs(i)%thresh,  & 
+                                                     & CS%abs_cs(i)%sig      )
     End Do
     If (Present(iE_get)) iE_get = E_index
 End Function sig_A_all
@@ -2121,9 +2153,9 @@ Function sig_A_iso(CS,iso,E,iE_get,iE_put) Result(sA)
     Real(dp) :: resT,resS
 
     If (Present(iE_put)) Then
-        E_index = iE_put
+        E_index = Max(iE_put,2)
     Else
-        E_index = Bisection_Search(E,CS%E_uni,CS%n_E_uni)
+        E_index = Min(Bisection_Search(E,CS%E_uni,CS%n_E_uni),CS%n_E_uni)
     End If
     sA = 0._dp
     !resonant contribution
