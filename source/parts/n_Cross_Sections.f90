@@ -110,17 +110,23 @@ Module n_Cross_Sections
     Contains
         Procedure, Pass :: sig_T_all  !given energy, returns total microscopic cross section for the atmosphere
         Procedure, Pass :: sig_T_iso  !given energy, returns total microscopic cross section for a specific isotope
+        Procedure, Pass :: sig_T_all_db
+        Procedure, Pass :: sig_T_iso_db
         Procedure, Pass :: sig_S_all  !given energy, returns microscopic scatter cross section for the atmosphere
         Procedure, Pass :: sig_S_iso  !given energy, returns microscopic scatter cross section for a specific isotope
+        Procedure, Pass :: sig_S_all_db
+        Procedure, Pass :: sig_S_iso_db
         Procedure, Pass :: sig_A_all  !given energy, returns microscopic absorption cross section for the atmosphere
         Procedure, Pass :: sig_A_iso  !given energy, returns microscopic absorption cross section for a specific isotope
-        Procedure, Pass :: sig_T_A  !given energy, returns total and absorption microscopic cross sections for the atmosphere
-        Procedure, Pass :: sig_T_broad
-        Procedure, Pass :: sig_T_A_broad
-        Procedure, Pass :: sig_S_iso_broad
-        GENERIC :: sig_T => sig_T_all , sig_T_iso
-        GENERIC :: sig_S => sig_S_all , sig_S_iso , sig_S_iso_broad
-        GENERIC :: sig_A => sig_A_all , sig_A_iso
+        Procedure, Pass :: sig_A_all_db
+        Procedure, Pass :: sig_A_iso_db
+        Procedure, Pass :: sig_T_A_all  !given energy, returns microscopic total and absorp cross sections for the atmosphere
+        Procedure, Pass :: sig_T_A_iso  !given energy, returns microscopic total and absorp cross sections for a specific isotope
+        Procedure, Pass :: sig_T_A_db
+        GENERIC :: sig_T_A => sig_T_A_all , sig_T_A_iso
+        GENERIC :: sig_T => sig_T_all , sig_T_iso , sig_T_iso_db
+        GENERIC :: sig_S => sig_S_all , sig_S_iso , sig_S_iso_db
+        GENERIC :: sig_A => sig_A_all , sig_A_iso , sig_A_iso_db
     End Type
 
     Integer, Parameter :: Tmax = 16  !limit for number of Romberg extrapolation stages in broadening quadrature
@@ -1865,7 +1871,7 @@ Subroutine Map_and_Store_AD(n_E_uni,E_uni,n_p,E_list,AD_list,ad,i_thresh)
     Call copy_da(AD_list(:),ad%da(:))
 End Subroutine Map_and_Store_AD
 
-Subroutine sig_T_A(CS,E,sT,sA,iE_get,iE_put)
+Subroutine sig_T_A_all(CS,E,sT,sA,iE_get,iE_put)
 !returns total and absorption cross section (sT,sA) for the total atmosphere
     Use Kinds, Only: dp
     Use Utilities, Only: Bisection_Search
@@ -1916,7 +1922,58 @@ Subroutine sig_T_A(CS,E,sT,sA,iE_get,iE_put)
     End Do
     sT = sA + sS
     If (Present(iE_get)) iE_get = E_index
-End Subroutine sig_T_A
+End Subroutine sig_T_A_all
+
+Subroutine sig_T_A_iso(CS,iso,E,sT,sA,iE_get,iE_put)
+!returns total and absorption cross section (sT,sA) for a single isotope (iso)
+    Use Kinds, Only: dp
+    Use Utilities, Only: Bisection_Search
+    Implicit None
+    Class(CS_Type), Intent(In) :: CS
+    Integer, Intent(In) :: iso
+    Real(dp), Intent(In) :: E
+    Real(dp), Intent(Out) :: sT,sA
+    Integer, Intent(Out), Optional :: iE_get
+    Integer, Intent(In), Optional :: iE_put
+    Integer :: E_index
+    Real(dp) :: sS
+    Real(dp) :: resT,resS
+
+    If (Present(iE_put)) Then
+        E_index = Max(iE_put,2)
+    Else
+        E_index = Min(Bisection_Search(E,CS%E_uni,CS%n_E_uni),CS%n_E_uni)
+    End If
+    sS = 0._dp
+    sA = 0._dp
+    !resonant contribution
+    If (CS%has_res_cs(iso)) Then
+        Call sig_Resonance(CS%res_cs(iso),E,resT,resS)
+        sS = sS + resS
+        sA = sA + resT - resS
+    End If
+    !background contribution
+    sS = sS + sig_Composite( E, & 
+                           & CS%n_E_uni,            & 
+                           & CS%E_uni,              & 
+                           & CS%lnE_uni,            & 
+                           & E_index,               & 
+                           & 0,                     & 
+                           & CS%lev_cs(iso)%n_lev,  & 
+                           & CS%lev_cs(iso)%thresh, & 
+                           & CS%lev_cs(iso)%sig     )
+    sA = sA + sig_Composite( E,                      & 
+                           & CS%n_E_uni,             & 
+                           & CS%E_uni,               & 
+                           & CS%lnE_uni,             & 
+                           & E_index,                & 
+                           & 1,                      & 
+                           & CS%abs_cs(iso)%n_modes, & 
+                           & CS%abs_cs(iso)%thresh,  & 
+                           & CS%abs_cs(iso)%sig      )
+    sT = sA + sS
+    If (Present(iE_get)) iE_get = E_index
+End Subroutine sig_T_A_iso
 
 Function sig_T_all(CS,E,iE_get,iE_put) Result(sT)
 !returns total cross section (sig_T_all) for the total atmosphere
@@ -2422,7 +2479,7 @@ Pure Subroutine Broad_sig_start(E,M,T,v,gamma,vRmin,vRmax)
     vRmax = v + vT
 End Subroutine Broad_sig_start
 
-Subroutine sig_T_A_broad(CS,E,T,sigT,sigA)
+Subroutine sig_T_A_db(CS,E,T,sigT,sigA)
     Use Kinds, Only: dp
     Use Global, Only: SqrtPi
     Use Utilities, Only: Bisection_Search
@@ -2445,25 +2502,25 @@ Subroutine sig_T_A_broad(CS,E,T,sigT,sigA)
     Call Broad_sig_start(E,CS%Mn,T,v,gamma,vR_min,vR_max)
     iE_min = Bisection_Search(Neutron_Energy(vR_min),CS%E_uni,CS%n_E_uni)
     If (Neutron_Energy(vR_max) .LE. CS%E_uni(iE_min)) Then  !only a single interval spanned in energy grid
-        sig_T_A = Broad_Romberg_T_A(CS,iE_min,vR_min,vR_max,gamma,v) * gamma / (SqrtPi * v**2)
+        sig_T_A = db_Romberg_T_A(CS,iE_min,vR_min,vR_max,gamma,v) * gamma / (SqrtPi * v**2)
         sigT = sig_T_A(total)
         sigA = sig_T_A(absor)
         Return
     End If
     iE_max = Bisection_Search(Neutron_Energy(vR_max),CS%E_uni,CS%n_E_uni) - 1
     !first interval (from E_min to first indexed E) is partial
-    sig_T_A = Broad_Romberg_T_A(CS,iE_min,vR_min,Neutron_Speed(CS%E_uni(iE_min)),gamma,v)
+    sig_T_A = db_Romberg_T_A(CS,iE_min,vR_min,Neutron_Speed(CS%E_uni(iE_min)),gamma,v)
     !middle intervals
     Do i = iE_min,iE_max-1
-        sig_T_A = sig_T_A + Broad_Romberg_T_A(CS,i+1,Neutron_Speed(CS%E_uni(i)),Neutron_Speed(CS%E_uni(i+1)),gamma,v)
+        sig_T_A = sig_T_A + db_Romberg_T_A(CS,i+1,Neutron_Speed(CS%E_uni(i)),Neutron_Speed(CS%E_uni(i+1)),gamma,v)
     End Do
     !last interval (from second to last indexed E to Emax) is partial, also apply normalization
-    sig_T_A = (sig_T_A + Broad_Romberg_T_A(CS,iE_max,Neutron_Speed(CS%E_uni(iE_max)),vR_max,gamma,v)) * gamma / (SqrtPi * v**2)
+    sig_T_A = (sig_T_A + db_Romberg_T_A(CS,iE_max,Neutron_Speed(CS%E_uni(iE_max)),vR_max,gamma,v)) * gamma / (SqrtPi * v**2)
     sigT = sig_T_A(total)
     sigA = sig_T_A(absor)
-End Subroutine sig_T_A_broad
+End Subroutine sig_T_A_db
 
-Function Broad_Romberg_T_A(CS,iE,vR1,vR2,gamma,v) Result(sig_T_A)
+Function db_Romberg_T_A(CS,iE,vR1,vR2,gamma,v) Result(sig_T_A)
     Use Kinds, Only: dp
     Use Neutron_Utilities, Only: Neutron_Energy
     Implicit None
@@ -2525,47 +2582,155 @@ Function Broad_Romberg_T_A(CS,iE,vR1,vR2,gamma,v) Result(sig_T_A)
     End Do
     !If we get this far, we did not converge
     Write(*,*)
-    Write(*,'(A,I0,A)')        'ERROR:  n_Cross_sections: Broad_Romberg_T_A:  Failed to converge in ',Tmax,' extrapolations.'
+    Write(*,'(A,I0,A)')        'ERROR:  n_Cross_sections: db_Romberg_T_A:  Failed to converge in ',Tmax,' extrapolations.'
     Write(*,'(A,2ES23.15)')    '        Final estimated value: ',Tk
     Write(*,'(A,2ES23.15)')    '        Prior estimated value: ',Tk0
     ERROR STOP
-End Function Broad_Romberg_T_A
+End Function db_Romberg_T_A
 
-Function sig_T_broad(CS,E,T) Result(sigT)
+Function sig_T_all_db(CS,E,T) Result(sigT)
+    Use Kinds, Only: dp
+    Implicit None
+    Real(dp) :: sigT
+    Class(CS_Type), Intent(In) :: CS
+    Real(dp), Intent(In) :: E ![kev]
+    Real(dp), Intent(In) :: T ![K]
+    Integer, Parameter :: total_sig = 0
+    Integer, Parameter :: scatter_sig = 1
+    Integer, Parameter :: absorp_sig = -1
+
+    sigT = sig_db(CS,E,T,total_sig)
+End Function sig_T_all_db
+
+Function sig_T_iso_db(CS,iso,E,T) Result(sigT)
+    Use Kinds, Only: dp
+    Implicit None
+    Real(dp) :: sigT
+    Class(CS_Type), Intent(In) :: CS
+    Integer, Intent(In) :: iso
+    Real(dp), Intent(In) :: E ![kev]
+    Real(dp), Intent(In) :: T ![K]
+    Integer, Parameter :: total_sig = 0
+    Integer, Parameter :: scatter_sig = 1
+    Integer, Parameter :: absorp_sig = -1
+
+    sigT = sig_db(CS,E,T,total_sig,iso)
+End Function sig_T_iso_db
+
+Function sig_S_all_db(CS,E,T) Result(sigS)
+    Use Kinds, Only: dp
+    Implicit None
+    Real(dp) :: sigS
+    Class(CS_Type), Intent(In) :: CS
+    Real(dp), Intent(In) :: E ![kev]
+    Real(dp), Intent(In) :: T ![K]
+    Integer, Parameter :: total_sig = 0
+    Integer, Parameter :: scatter_sig = 1
+    Integer, Parameter :: absorp_sig = -1
+
+    sigS = sig_db(CS,E,T,scatter_sig)
+End Function sig_S_all_db
+
+Function sig_S_iso_db(CS,iso,E,T) Result(sigS)
+    Use Kinds, Only: dp
+    Implicit None
+    Real(dp) :: sigS
+    Class(CS_Type), Intent(In) :: CS
+    Integer, Intent(In) :: iso
+    Real(dp), Intent(In) :: E ![kev]
+    Real(dp), Intent(In) :: T ![K]
+    Integer, Parameter :: total_sig = 0
+    Integer, Parameter :: scatter_sig = 1
+    Integer, Parameter :: absorp_sig = -1
+
+    sigS = sig_db(CS,E,T,scatter_sig,iso)
+End Function sig_S_iso_db
+
+Function sig_A_all_db(CS,E,T) Result(sigA)
+    Use Kinds, Only: dp
+    Implicit None
+    Real(dp) :: sigA
+    Class(CS_Type), Intent(In) :: CS
+    Real(dp), Intent(In) :: E ![kev]
+    Real(dp), Intent(In) :: T ![K]
+    Integer, Parameter :: total_sig = 0
+    Integer, Parameter :: scatter_sig = 1
+    Integer, Parameter :: absorp_sig = -1
+
+    sigA = sig_db(CS,E,T,absorp_sig)
+End Function sig_A_all_db
+
+Function sig_A_iso_db(CS,iso,E,T) Result(sigA)
+    Use Kinds, Only: dp
+    Implicit None
+    Real(dp) :: sigA
+    Class(CS_Type), Intent(In) :: CS
+    Integer, Intent(In) :: iso
+    Real(dp), Intent(In) :: E ![kev]
+    Real(dp), Intent(In) :: T ![K]
+    Integer, Parameter :: total_sig = 0
+    Integer, Parameter :: scatter_sig = 1
+    Integer, Parameter :: absorp_sig = -1
+
+    sigA = sig_db(CS,E,T,absorp_sig,iso)
+End Function sig_A_iso_db
+
+Function sig_db(CS,E,T,sig_type,iso) Result(sig)
     Use Kinds, Only: dp
     Use Global, Only: SqrtPi
     Use Utilities, Only: Bisection_Search
     Use Neutron_Utilities, Only: Neutron_Energy
     Use Neutron_Utilities, Only: Neutron_Speed
     Implicit None
-    Real(dp) :: sigT
+    Real(dp) :: sig
     Class(CS_Type), Intent(In) :: CS
     Real(dp), Intent(In) :: E ![kev]
     Real(dp), Intent(In) :: T ![K]
+    Integer, Intent(In) :: sig_type
+    Integer, Intent(In), Optional :: iso
     Real(dp) :: v  ![km/s] neutron velocity
     Real(dp) :: gamma  ![km/s]
     Real(dp) :: vR_min,vR_max
     Integer :: iE_min,iE_max
     Integer :: i
+    Integer, Parameter :: total_sig = 0
+    Integer, Parameter :: scatter_sig = 1
+    Integer, Parameter :: absorp_sig = -1
 
     Call Broad_sig_start(E,CS%Mn,T,v,gamma,vR_min,vR_max)
     iE_min = Bisection_Search(Neutron_Energy(vR_min),CS%E_uni,CS%n_E_uni)
     If (Neutron_Energy(vR_max) .LE. CS%E_uni(iE_min)) Then  !only a single interval spanned in energy grid
-        sigT = Broad_Romberg_T(CS,iE_min,vR_min,vR_max,gamma,v) *  gamma / (SqrtPi * v**2)
+        If (Present(iso)) Then
+            sig = db_Romberg(CS,iE_min,vR_min,vR_max,gamma,v,sig_type,iso) *  gamma / (SqrtPi * v**2)
+        Else
+            sig = db_Romberg(CS,iE_min,vR_min,vR_max,gamma,v,sig_type) *  gamma / (SqrtPi * v**2)
+        End If
         Return
     End If
     iE_max = Bisection_Search(Neutron_Energy(vR_max),CS%E_uni,CS%n_E_uni) - 1
-    !first interval (from E_min to first indexed E) is partial
-    sigT = Broad_Romberg_T(CS,iE_min,vR_min,Neutron_Speed(CS%E_uni(iE_min)),gamma,v)
-    !middle intervals
-    Do i = iE_min,iE_max-1
-        sigT = sigT + Broad_Romberg_T(CS,i+1,Neutron_Speed(CS%E_uni(i)),Neutron_Speed(CS%E_uni(i+1)),gamma,v)
-    End Do
-    !last interval (from second to last indexed E to Emax) is partial, also apply normalization
-    sigT = (sigT + Broad_Romberg_T(CS,iE_max,Neutron_Speed(CS%E_uni(iE_max)),vR_max,gamma,v)) * gamma / (SqrtPi * v**2)
-End Function sig_T_broad
+    If (Present(iso)) Then
+        !first interval (from E_min to first indexed E) is partial
+        sig = db_Romberg(CS,iE_min,vR_min,Neutron_Speed(CS%E_uni(iE_min)),gamma,v,sig_type,iso)
+        !middle intervals
+        Do i = iE_min,iE_max-1
+            sig = sig + db_Romberg(CS,i+1,Neutron_Speed(CS%E_uni(i)),Neutron_Speed(CS%E_uni(i+1)),gamma,v,sig_type,iso)
+        End Do
+        !last interval (from second to last indexed E to Emax) is partial
+        sig = sig + db_Romberg(CS,iE_max,Neutron_Speed(CS%E_uni(iE_max)),vR_max,gamma,v,sig_type,iso)
+    Else
+        !first interval (from E_min to first indexed E) is partial
+        sig = db_Romberg(CS,iE_min,vR_min,Neutron_Speed(CS%E_uni(iE_min)),gamma,v,sig_type)
+        !middle intervals
+        Do i = iE_min,iE_max-1
+            sig = sig + db_Romberg(CS,i+1,Neutron_Speed(CS%E_uni(i)),Neutron_Speed(CS%E_uni(i+1)),gamma,v,sig_type)
+        End Do
+        !last interval (from second to last indexed E to Emax) is partial
+        sig = sig + db_Romberg(CS,iE_max,Neutron_Speed(CS%E_uni(iE_max)),vR_max,gamma,v,sig_type)
+    End If
+    sig = sig * gamma / (SqrtPi * v**2)
+End Function sig_db
 
-Function Broad_Romberg_T(CS,iE,vR1,vR2,gamma,v) Result(sT)
+Function db_Romberg(CS,iE,vR1,vR2,gamma,v,sig_type,iso) Result(sT)
     Use Kinds, Only: dp
     Use Neutron_Utilities, Only: Neutron_Energy
     Implicit None
@@ -2574,6 +2739,8 @@ Function Broad_Romberg_T(CS,iE,vR1,vR2,gamma,v) Result(sT)
     Integer, Intent(In) :: iE
     Real(dp), Intent(In) :: vR1,vR2
     Real(dp), Intent(In) :: gamma,v
+    Integer, Intent(In) :: sig_type
+    Integer, Intent(In), Optional :: iso
     Real(dp) :: sig_vR1,sig_vR2,sig_vR
     Real(dp) :: s1,s2
     Real(dp) :: vR
@@ -2583,10 +2750,37 @@ Function Broad_Romberg_T(CS,iE,vR1,vR2,gamma,v) Result(sT)
     Integer :: n      !number of intervals
     Real(dp) :: h0,h  !spacing between quadrature ordinates
     Real(dp) :: fk    !multiplier for extrapolation steps
+    Integer, Parameter :: total_sig = 0
+    Integer, Parameter :: scatter_sig = 1
+    Integer, Parameter :: absorp_sig = -1
 
     !Initial trapezoid estimate
-    sig_vR1 = CS%sig_T(Neutron_Energy(vR1),iE_put=iE)
-    sig_vR2 = CS%sig_T(Neutron_Energy(vR2),iE_put=iE)
+    Select Case (sig_type)
+        Case (total_sig)
+            If (Present(iso)) Then
+                sig_vR1 = CS%sig_T(iso,Neutron_Energy(vR1),iE_put=iE)
+                sig_vR2 = CS%sig_T(iso,Neutron_Energy(vR2),iE_put=iE)
+            Else
+                sig_vR1 = CS%sig_T(Neutron_Energy(vR1),iE_put=iE)
+                sig_vR2 = CS%sig_T(Neutron_Energy(vR2),iE_put=iE)
+            End If
+        Case (scatter_sig)
+            If (Present(iso)) Then
+                sig_vR1 = CS%sig_S(iso,Neutron_Energy(vR1),iE_put=iE)
+                sig_vR2 = CS%sig_S(iso,Neutron_Energy(vR2),iE_put=iE)
+            Else
+                sig_vR1 = CS%sig_S(Neutron_Energy(vR1),iE_put=iE)
+                sig_vR2 = CS%sig_S(Neutron_Energy(vR2),iE_put=iE)
+            End If
+        Case (absorp_sig)
+            If (Present(iso)) Then
+                sig_vR1 = CS%sig_A(iso,Neutron_Energy(vR1),iE_put=iE)
+                sig_vR2 = CS%sig_A(iso,Neutron_Energy(vR2),iE_put=iE)
+            Else
+                sig_vR1 = CS%sig_A(Neutron_Energy(vR1),iE_put=iE)
+                sig_vR2 = CS%sig_A(Neutron_Energy(vR2),iE_put=iE)
+            End If
+    End Select
     s1 = 0.5_dp * (Broad_Integrand( vR1,sig_vR1,gamma,v) + Broad_Integrand( vR2,sig_vR2,gamma,v))
     s2 = 0.5_dp * (Broad_Integrand(-vR1,sig_vR1,gamma,v) + Broad_Integrand(-vR2,sig_vR2,gamma,v))
     h0 = vR2 - vR1
@@ -2598,7 +2792,26 @@ Function Broad_Romberg_T(CS,iE,vR1,vR2,gamma,v) Result(sT)
         h = h0 / Real(n,dp)
         Do j = 1,n-1,2  !only odd values of j, these are the NEW points at which to evaluate the integrand
             vR = vR1 + Real(j,dp)*h
-            sig_vR = CS%sig_T(Neutron_Energy(vR),iE_put=iE)
+            Select Case (sig_type)
+                Case (total_sig)
+                    If (Present(iso)) Then
+                        sig_vR = CS%sig_T(iso,Neutron_Energy(vR),iE_put=iE)
+                    Else
+                        sig_vR = CS%sig_T(Neutron_Energy(vR),iE_put=iE)
+                    End If
+                Case (scatter_sig)
+                    If (Present(iso)) Then
+                        sig_vR = CS%sig_S(iso,Neutron_Energy(vR),iE_put=iE)
+                    Else
+                        sig_vR = CS%sig_S(Neutron_Energy(vR),iE_put=iE)
+                    End If
+                Case (absorp_sig)
+                    If (Present(iso)) Then
+                        sig_vR = CS%sig_A(iso,Neutron_Energy(vR),iE_put=iE)
+                    Else
+                        sig_vR = CS%sig_A(Neutron_Energy(vR),iE_put=iE)
+                    End If
+            End Select
             s1 = s1 + Broad_Integrand( vR,sig_vR,gamma,v)
             s2 = s2 + Broad_Integrand(-vR,sig_vR,gamma,v)
         End Do
@@ -2625,114 +2838,11 @@ Function Broad_Romberg_T(CS,iE,vR1,vR2,gamma,v) Result(sT)
     End Do
     !If we get this far, we did not converge
     Write(*,*)
-    Write(*,'(A,I0,A)')        'ERROR:  n_Cross_sections: Broad_Romberg_T:  Failed to converge in ',Tmax,' extrapolations.'
+    Write(*,'(A,I0,A)')        'ERROR:  n_Cross_sections: db_Romberg:  Failed to converge in ',Tmax,' extrapolations.'
     Write(*,'(A,ES23.15)')    '        Final estimated value: ',Tk
     Write(*,'(A,ES23.15)')    '        Prior estimated value: ',Tk0
     ERROR STOP
-End Function Broad_Romberg_T
-
-Function sig_S_iso_broad(CS,iso,E,T) Result(sigS)
-    Use Kinds, Only: dp
-    Use Global, Only: SqrtPi
-    Use Global, Only: neutron_mass
-    Use Utilities, Only: Bisection_Search
-    Use Neutron_Utilities, Only: Neutron_Energy
-    Use Neutron_Utilities, Only: Neutron_Speed
-    Implicit None
-    Real(dp) :: sigS
-    Class(CS_Type), Intent(In) :: CS
-    Integer, Intent(In) :: iso
-    Real(dp), Intent(In) :: E ![kev]
-    Real(dp), Intent(In) :: T ![K]
-    Real(dp) :: v  ![km/s] neutron velocity
-    Real(dp) :: gamma  ![km/s]
-    Real(dp) :: vR_min,vR_max
-    Integer :: iE_min,iE_max
-    Integer :: i
-
-    Call Broad_sig_start(E,CS%An(iso)*neutron_mass,T,v,gamma,vR_min,vR_max)
-    iE_min = Bisection_Search(Neutron_Energy(vR_min),CS%E_uni,CS%n_E_uni)
-    If (Neutron_Energy(vR_max) .LE. CS%E_uni(iE_min)) Then  !only a single interval spanned in energy grid
-        sigS = Broad_Romberg_S_iso(CS,iso,iE_min,vR_min,vR_max,gamma,v) *  gamma / (SqrtPi * v**2)
-        Return
-    End If
-    iE_max = Bisection_Search(Neutron_Energy(vR_max),CS%E_uni,CS%n_E_uni) - 1
-    !first interval (from E_min to first indexed E) is partial
-    sigS = Broad_Romberg_S_iso(CS,iso,iE_min,vR_min,Neutron_Speed(CS%E_uni(iE_min)),gamma,v)
-    !middle intervals
-    Do i = iE_min,iE_max-1
-        sigS = sigS + Broad_Romberg_S_iso(CS,iso,i+1,Neutron_Speed(CS%E_uni(i)),Neutron_Speed(CS%E_uni(i+1)),gamma,v)
-    End Do
-    !last interval (from second to last indexed E to Emax) is partial, also apply normalization
-    sigS = (sigS + Broad_Romberg_S_iso(CS,iso,iE_max,Neutron_Speed(CS%E_uni(iE_max)),vR_max,gamma,v)) * gamma / (SqrtPi * v**2)
-End Function sig_S_iso_broad
-
-Function Broad_Romberg_S_iso(CS,iso,iE,vR1,vR2,gamma,v) Result(sS)
-    Use Kinds, Only: dp
-    Use Neutron_Utilities, Only: Neutron_Energy
-    Implicit None
-    Real(dp) :: sS
-    Type(CS_type), Intent(In) :: CS
-    Integer, Intent(In) :: iso
-    Integer, Intent(In) :: iE
-    Real(dp), Intent(In) :: vR1,vR2
-    Real(dp), Intent(In) :: gamma,v
-    Real(dp) :: sig_vR1,sig_vR2,sig_vR
-    Real(dp) :: s1,s2
-    Real(dp) :: vR
-    Real(dp) :: T(0:Tmax)  !Extrapolation table previous row
-    Real(dp) :: Tk0,Tk  !Extrapolation table current row values
-    Integer :: i,j,k  !counters: i for table row, j for quadrature ordinates, k for table column
-    Integer :: n      !number of intervals
-    Real(dp) :: h0,h  !spacing between quadrature ordinates
-    Real(dp) :: fk    !multiplier for extrapolation steps
-
-    !Initial trapezoid estimate
-    sig_vR1 = CS%sig_S_iso(iso,Neutron_Energy(vR1),iE_put=iE)
-    sig_vR2 = CS%sig_S_iso(iso,Neutron_Energy(vR2),iE_put=iE)
-    s1 = 0.5_dp * (Broad_Integrand( vR1,sig_vR1,gamma,v) + Broad_Integrand( vR2,sig_vR2,gamma,v))
-    s2 = 0.5_dp * (Broad_Integrand(-vR1,sig_vR1,gamma,v) + Broad_Integrand(-vR2,sig_vR2,gamma,v))
-    h0 = vR2 - vR1
-    T(0) = h0 * (s1 - s2)
-    n = 1
-    Do i = 1,Tmax !up to Tmax rows in the table
-        !Trapezoid estimate for the 0-th column of the i-th row of table
-        n = n * 2
-        h = h0 / Real(n,dp)
-        Do j = 1,n-1,2  !only odd values of j, these are the NEW points at which to evaluate the integrand
-            vR = vR1 + Real(j,dp)*h
-            sig_vR = CS%sig_S_iso(iso,Neutron_Energy(vR),iE_put=iE)
-            s1 = s1 + Broad_Integrand( vR,sig_vR,gamma,v)
-            s2 = s2 + Broad_Integrand(-vR,sig_vR,gamma,v)
-        End Do
-        Tk0 = h * (s1 - s2)
-        !Fill i-th row, columns k = 1:i, with extrapolated estimates
-        fk = 1._dp
-        Do k = 1,i  !up to i columns this row
-            fk = fk * 4._dp
-            Tk = (fk * Tk0 - T(k-1)) / (fk - 1._dp)
-            If (k .LT. i) Then
-                T(k-1) = Tk0  !store Tk0 for next i
-                Tk0 = Tk  !store Tk for next k
-            End If !otherwise, skip storage steps if working final column
-        End Do
-        !check for convergence
-        If ( Abs(T(i-1) - Tk) .LE. rTol * Abs(Tk) ) Then
-            sS = Tk  !Tk is the highest precision converged value
-            Return  !Normal exit
-        Else  !prep for the next time though the loop
-            !store Tk0 and Tk for next i
-            T(i-1) = Tk0
-            T(i) = Tk
-        End If
-    End Do
-    !If we get this far, we did not converge
-    Write(*,*)
-    Write(*,'(A,I0,A)')        'ERROR:  n_Cross_sections: Broad_Romberg_S_iso:  Failed to converge in ',Tmax,' extrapolations.'
-    Write(*,'(A,ES23.15)')    '        Final estimated value: ',Tk
-    Write(*,'(A,ES23.15)')    '        Prior estimated value: ',Tk0
-    ERROR STOP
-End Function Broad_Romberg_S_iso
+End Function db_Romberg
 
 Elemental Function Broad_Integrand(vR,sig,gamma,v)
     Use Kinds, Only: dp
@@ -2771,7 +2881,7 @@ Subroutine Write_Cross_Sections(CS,Broadened_CS,file_name)
                            & '-----------------------','-----------------------'
         Do i = 1,CS%n_E_uni
             Call CS%sig_T_A(CS%E_uni(i),sT,sA)
-            Call CS%sig_T_A_broad(CS%E_uni(i),273.15_dp,sTb,sAb)
+            Call CS%sig_T_A_db(CS%E_uni(i),273.15_dp,sTb,sAb)
             Write(unit,'(5ES27.16E3)') CS%E_uni(i),sT,sTb,sA,sAb
         End Do
     Else
