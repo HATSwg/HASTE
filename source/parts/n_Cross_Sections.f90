@@ -124,13 +124,17 @@ Module n_Cross_Sections
         Procedure, Pass :: sig_T_A_iso  !given energy, returns microscopic total and absorp cross sections for a specific isotope
         Procedure, Pass :: sig_T_A_db
         GENERIC :: sig_T_A => sig_T_A_all , sig_T_A_iso
-        GENERIC :: sig_T => sig_T_all , sig_T_iso , sig_T_iso_db
-        GENERIC :: sig_S => sig_S_all , sig_S_iso , sig_S_iso_db
-        GENERIC :: sig_A => sig_A_all , sig_A_iso , sig_A_iso_db
+        GENERIC :: sig_T => sig_T_all , sig_T_iso , sig_T_all_db , sig_T_iso_db
+        GENERIC :: sig_S => sig_S_all , sig_S_iso , sig_S_all_db , sig_S_iso_db
+        GENERIC :: sig_A => sig_A_all , sig_A_iso , sig_A_all_db , sig_A_iso_db
     End Type
 
-    Integer, Parameter :: Tmax = 16  !limit for number of Romberg extrapolation stages in broadening quadrature
-    Real(dp), Parameter :: rTol = 1.E-6_dp  !relative tolerance for convergence of broadening integrals, cross section data has 
+    !Constants and parameters for Doppler Broadening procedures
+    Integer, Parameter :: db_choose_total_sig = 0
+    Integer, Parameter :: db_choose_scatter_sig = 1
+    Integer, Parameter :: db_choose_absorp_sig = -1
+    Integer, Parameter :: Tmax = 21  !limit for number of Romberg extrapolation stages in broadening quadrature
+    Real(dp), Parameter :: rTol = 5.E-5_dp  !relative tolerance for convergence of broadening integrals, cross section data has 
                                             !about 5 good digits...
 
     !MT_disappearance lists the ENDF MT numbers corresponding to neutron interactions WITHOUT a neutron in the exit channel.
@@ -219,6 +223,7 @@ Contains
 
 Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,aniso_dist,E_min,E_max,verbose) Result(CS)
     Use Kinds, Only: dp
+    Use Kinds, Only: id
     Use Sorting, Only: Union_Sort
     Use FileIO_Utilities, Only: max_path_len
     Use FileIO_Utilities, Only: slash
@@ -266,8 +271,10 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
     Real(dp) :: trash_r
     Logical :: v,first_time
     Character(15) :: v_string
+    Integer, Parameter :: inter_pts = 5
     Real(dp) :: En,sT,sS,sA
-    Integer :: inter_pts
+    Integer(id) :: c_start,c_end
+    Real(dp) :: dt_T0,dt_T300
     Logical :: skip_section
     Real(dp) :: thresh
 
@@ -319,9 +326,6 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
         Open(NEWUNIT = v_unit , FILE = 'n_cs_HASTE_summary.txt' , STATUS = 'REPLACE' , ACTION = 'WRITE' , IOSTAT = stat)
         If (stat .NE. 0) Call Output_Message( 'ERROR:  Cross_Sections: Setup_Cross_Sections:  File open error, ' & 
                                             & //'n_cs_HASTE_summary.txt'//', IOSTAT=',stat,kill=.TRUE. )
-        Open(NEWUNIT = t_unit , FILE = 'n_cs_HASTE_summary_traces.txt' , STATUS = 'REPLACE' , ACTION = 'WRITE' , IOSTAT = stat)
-        If (stat .NE. 0) Call Output_Message( 'ERROR:  Cross_Sections: Setup_Cross_Sections:  File open error, ' & 
-                                            & //'n_cs_HASTE_summary_traces.txt'//', IOSTAT=',stat,kill=.TRUE. )
     End If
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     !!  CREATE A UNIFIED ENERGY LIST FOR THE CROSS SECTION DATA
@@ -943,13 +947,13 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
         !N2H For verbose output, write a summary of scattering modes for this isotope
     End Do
     CS%Mn = neutron_mass * Sum(CS%An) / CS%n_iso
-    If (v) Then  !write cross section traces for each interaction, for each isotope
+    If (v) Then
+        !write cross section traces for total, scatter, and absorption for each isotope
         Write(v_unit,*)
         Write(v_unit,'(A)') half_dash_line
-        Write(v_unit,'(A)') 'CROSS SECTION TRACES FOR VERIFICATION'
+        Write(v_unit,'(A)') 'CROSS SECTION TRACES FOR VERIFICATION (T = 0 K)'
         Write(v_unit,'(A)') half_dash_line
         Write(v_unit,*)
-
         Write(v_unit,'(A9,4A27)',ADVANCE='NO') ' Index ',' E [keV]                ',' Atmo sig-T [barns]     ', & 
                                              &           ' Atmo sig-S [barns]     ',' Atmo sig-A [barns]     '
         Do k = 1,CS%n_iso
@@ -964,7 +968,9 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
             Write(v_unit,'(3A27)',ADVANCE='NO') '------------------------','------------------------','------------------------'
         End Do
         Write(v_unit,*)
-        inter_pts = 5
+        Open(NEWUNIT = t_unit , FILE = 'n_cs_HASTE_summary_traces.txt' , STATUS = 'REPLACE' , ACTION = 'WRITE' , IOSTAT = stat)
+        If (stat .NE. 0) Call Output_Message( 'ERROR:  Cross_Sections: Setup_Cross_Sections:  File open error, ' & 
+                                            & //'n_cs_HASTE_summary_traces.txt'//', IOSTAT=',stat,kill=.TRUE. )
         Do i = 1,CS%n_E_uni-1
             Do j = 0,inter_pts+1
                 En = CS%E_uni(i) + Real(j,dp) * (CS%E_uni(i+1)-CS%E_uni(i)) / Real(inter_pts+1,dp)
@@ -984,6 +990,57 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
                     sT = CS%sig_T(k,En)
                     sS = CS%sig_S(k,En)
                     sA = CS%sig_A(k,En)
+                    Write(v_unit,'(3ES27.16E3)',ADVANCE='NO') sT , sS , sA
+                    Write(t_unit,'(3ES27.16E3)',ADVANCE='NO') sT , sS , sA
+                End Do
+                Write(v_unit,*)
+                Write(t_unit,*)
+                If (j.EQ.inter_pts .AND. i.LT.CS%n_E_uni-1) Exit
+            End Do
+        End Do
+        Close(t_unit)
+        !write cross section traces for total, scatter, and absorption for each isotope broadened to 300K
+        Write(v_unit,*)
+        Write(v_unit,'(A)') half_dash_line
+        Write(v_unit,'(A)') 'CROSS SECTION TRACES FOR VERIFICATION (T = 300 K)'
+        Write(v_unit,'(A)') half_dash_line
+        Write(v_unit,*)
+        Write(v_unit,'(A9,4A27)',ADVANCE='NO') ' Index ',' E [keV]                ',' Atmo sig-T [barns]     ', & 
+                                             &           ' Atmo sig-S [barns]     ',' Atmo sig-A [barns]     '
+        Do k = 1,CS%n_iso
+            Write(v_unit,'(3A27)',ADVANCE='NO') ' '//isotope_names(k)//' sig-T [barns]     ', & 
+                                              & ' '//isotope_names(k)//' sig-S [barns]     ', & 
+                                              & ' '//isotope_names(k)//' sig-A [barns]     '
+        End Do
+        Write(v_unit,*)
+        Write(v_unit,'(A9,4A27)',ADVANCE='NO') '-------','------------------------','------------------------', & 
+                                             & '------------------------','------------------------'
+        Do k = 1,CS%n_iso
+            Write(v_unit,'(3A27)',ADVANCE='NO') '------------------------','------------------------','------------------------'
+        End Do
+        Write(v_unit,*)
+        Open(NEWUNIT = t_unit , FILE = 'n_cs_HASTE_summary_traces_300K.txt' , STATUS = 'REPLACE' , ACTION = 'WRITE' , IOSTAT = stat)
+        If (stat .NE. 0) Call Output_Message( 'ERROR:  Cross_Sections: Setup_Cross_Sections:  File open error, ' & 
+                                            & //'n_cs_HASTE_summary_traces_300K.txt'//', IOSTAT=',stat,kill=.TRUE. )
+        Do i = 1,CS%n_E_uni-1
+            Do j = 0,inter_pts+1
+                En = CS%E_uni(i) + Real(j,dp) * (CS%E_uni(i+1)-CS%E_uni(i)) / Real(inter_pts+1,dp)
+                If (j .EQ. 0) Then
+                    Write(v_unit,'(I9)',ADVANCE='NO') i
+                Else If (j .EQ. inter_pts+1) Then
+                    Write(v_unit,'(I9)',ADVANCE='NO') i + 1
+                Else
+                    Write(v_unit,'(A9)',ADVANCE='NO') ''
+                End If
+                sT = CS%sig_T(En,300._dp)
+                sS = CS%sig_S(En,300._dp)
+                sA = CS%sig_A(En,300._dp)
+                Write(v_unit,'(4ES27.16E3)',ADVANCE='NO') En , sT , sS , sA
+                Write(t_unit,'(4ES27.16E3)',ADVANCE='NO') En , sT , sS , sA
+                Do k = 1,CS%n_iso
+                    sT = CS%sig_T(k,En,300._dp)
+                    sS = CS%sig_S(k,En,300._dp)
+                    sA = CS%sig_A(k,En,300._dp)
                     Write(v_unit,'(3ES27.16E3)',ADVANCE='NO') sT , sS , sA
                     Write(t_unit,'(3ES27.16E3)',ADVANCE='NO') sT , sS , sA
                 End Do
@@ -2595,11 +2652,8 @@ Function sig_T_all_db(CS,E,T) Result(sigT)
     Class(CS_Type), Intent(In) :: CS
     Real(dp), Intent(In) :: E ![kev]
     Real(dp), Intent(In) :: T ![K]
-    Integer, Parameter :: total_sig = 0
-    Integer, Parameter :: scatter_sig = 1
-    Integer, Parameter :: absorp_sig = -1
 
-    sigT = sig_db(CS,E,T,total_sig)
+    sigT = sig_db(CS,E,T,db_choose_total_sig)
 End Function sig_T_all_db
 
 Function sig_T_iso_db(CS,iso,E,T) Result(sigT)
@@ -2610,11 +2664,8 @@ Function sig_T_iso_db(CS,iso,E,T) Result(sigT)
     Integer, Intent(In) :: iso
     Real(dp), Intent(In) :: E ![kev]
     Real(dp), Intent(In) :: T ![K]
-    Integer, Parameter :: total_sig = 0
-    Integer, Parameter :: scatter_sig = 1
-    Integer, Parameter :: absorp_sig = -1
 
-    sigT = sig_db(CS,E,T,total_sig,iso)
+    sigT = sig_db(CS,E,T,db_choose_total_sig,iso)
 End Function sig_T_iso_db
 
 Function sig_S_all_db(CS,E,T) Result(sigS)
@@ -2624,11 +2675,8 @@ Function sig_S_all_db(CS,E,T) Result(sigS)
     Class(CS_Type), Intent(In) :: CS
     Real(dp), Intent(In) :: E ![kev]
     Real(dp), Intent(In) :: T ![K]
-    Integer, Parameter :: total_sig = 0
-    Integer, Parameter :: scatter_sig = 1
-    Integer, Parameter :: absorp_sig = -1
 
-    sigS = sig_db(CS,E,T,scatter_sig)
+    sigS = sig_db(CS,E,T,db_choose_scatter_sig)
 End Function sig_S_all_db
 
 Function sig_S_iso_db(CS,iso,E,T) Result(sigS)
@@ -2639,11 +2687,8 @@ Function sig_S_iso_db(CS,iso,E,T) Result(sigS)
     Integer, Intent(In) :: iso
     Real(dp), Intent(In) :: E ![kev]
     Real(dp), Intent(In) :: T ![K]
-    Integer, Parameter :: total_sig = 0
-    Integer, Parameter :: scatter_sig = 1
-    Integer, Parameter :: absorp_sig = -1
 
-    sigS = sig_db(CS,E,T,scatter_sig,iso)
+    sigS = sig_db(CS,E,T,db_choose_scatter_sig,iso)
 End Function sig_S_iso_db
 
 Function sig_A_all_db(CS,E,T) Result(sigA)
@@ -2653,11 +2698,8 @@ Function sig_A_all_db(CS,E,T) Result(sigA)
     Class(CS_Type), Intent(In) :: CS
     Real(dp), Intent(In) :: E ![kev]
     Real(dp), Intent(In) :: T ![K]
-    Integer, Parameter :: total_sig = 0
-    Integer, Parameter :: scatter_sig = 1
-    Integer, Parameter :: absorp_sig = -1
 
-    sigA = sig_db(CS,E,T,absorp_sig)
+    sigA = sig_db(CS,E,T,db_choose_absorp_sig)
 End Function sig_A_all_db
 
 Function sig_A_iso_db(CS,iso,E,T) Result(sigA)
@@ -2668,11 +2710,8 @@ Function sig_A_iso_db(CS,iso,E,T) Result(sigA)
     Integer, Intent(In) :: iso
     Real(dp), Intent(In) :: E ![kev]
     Real(dp), Intent(In) :: T ![K]
-    Integer, Parameter :: total_sig = 0
-    Integer, Parameter :: scatter_sig = 1
-    Integer, Parameter :: absorp_sig = -1
 
-    sigA = sig_db(CS,E,T,absorp_sig,iso)
+    sigA = sig_db(CS,E,T,db_choose_absorp_sig,iso)
 End Function sig_A_iso_db
 
 Function sig_db(CS,E,T,sig_type,iso) Result(sig)
@@ -2693,9 +2732,6 @@ Function sig_db(CS,E,T,sig_type,iso) Result(sig)
     Real(dp) :: vR_min,vR_max
     Integer :: iE_min,iE_max
     Integer :: i
-    Integer, Parameter :: total_sig = 0
-    Integer, Parameter :: scatter_sig = 1
-    Integer, Parameter :: absorp_sig = -1
 
     Call Broad_sig_start(E,CS%Mn,T,v,gamma,vR_min,vR_max)
     iE_min = Bisection_Search(Neutron_Energy(vR_min),CS%E_uni,CS%n_E_uni)
@@ -2750,13 +2786,10 @@ Function db_Romberg(CS,iE,vR1,vR2,gamma,v,sig_type,iso) Result(sT)
     Integer :: n      !number of intervals
     Real(dp) :: h0,h  !spacing between quadrature ordinates
     Real(dp) :: fk    !multiplier for extrapolation steps
-    Integer, Parameter :: total_sig = 0
-    Integer, Parameter :: scatter_sig = 1
-    Integer, Parameter :: absorp_sig = -1
 
     !Initial trapezoid estimate
     Select Case (sig_type)
-        Case (total_sig)
+        Case (db_choose_total_sig)
             If (Present(iso)) Then
                 sig_vR1 = CS%sig_T(iso,Neutron_Energy(vR1),iE_put=iE)
                 sig_vR2 = CS%sig_T(iso,Neutron_Energy(vR2),iE_put=iE)
@@ -2764,7 +2797,7 @@ Function db_Romberg(CS,iE,vR1,vR2,gamma,v,sig_type,iso) Result(sT)
                 sig_vR1 = CS%sig_T(Neutron_Energy(vR1),iE_put=iE)
                 sig_vR2 = CS%sig_T(Neutron_Energy(vR2),iE_put=iE)
             End If
-        Case (scatter_sig)
+        Case (db_choose_scatter_sig)
             If (Present(iso)) Then
                 sig_vR1 = CS%sig_S(iso,Neutron_Energy(vR1),iE_put=iE)
                 sig_vR2 = CS%sig_S(iso,Neutron_Energy(vR2),iE_put=iE)
@@ -2772,7 +2805,7 @@ Function db_Romberg(CS,iE,vR1,vR2,gamma,v,sig_type,iso) Result(sT)
                 sig_vR1 = CS%sig_S(Neutron_Energy(vR1),iE_put=iE)
                 sig_vR2 = CS%sig_S(Neutron_Energy(vR2),iE_put=iE)
             End If
-        Case (absorp_sig)
+        Case (db_choose_absorp_sig)
             If (Present(iso)) Then
                 sig_vR1 = CS%sig_A(iso,Neutron_Energy(vR1),iE_put=iE)
                 sig_vR2 = CS%sig_A(iso,Neutron_Energy(vR2),iE_put=iE)
@@ -2793,19 +2826,19 @@ Function db_Romberg(CS,iE,vR1,vR2,gamma,v,sig_type,iso) Result(sT)
         Do j = 1,n-1,2  !only odd values of j, these are the NEW points at which to evaluate the integrand
             vR = vR1 + Real(j,dp)*h
             Select Case (sig_type)
-                Case (total_sig)
+                Case (db_choose_total_sig)
                     If (Present(iso)) Then
                         sig_vR = CS%sig_T(iso,Neutron_Energy(vR),iE_put=iE)
                     Else
                         sig_vR = CS%sig_T(Neutron_Energy(vR),iE_put=iE)
                     End If
-                Case (scatter_sig)
+                Case (db_choose_scatter_sig)
                     If (Present(iso)) Then
                         sig_vR = CS%sig_S(iso,Neutron_Energy(vR),iE_put=iE)
                     Else
                         sig_vR = CS%sig_S(Neutron_Energy(vR),iE_put=iE)
                     End If
-                Case (absorp_sig)
+                Case (db_choose_absorp_sig)
                     If (Present(iso)) Then
                         sig_vR = CS%sig_A(iso,Neutron_Energy(vR),iE_put=iE)
                     Else
@@ -2838,9 +2871,9 @@ Function db_Romberg(CS,iE,vR1,vR2,gamma,v,sig_type,iso) Result(sT)
     End Do
     !If we get this far, we did not converge
     Write(*,*)
-    Write(*,'(A,I0,A)')        'ERROR:  n_Cross_sections: db_Romberg:  Failed to converge in ',Tmax,' extrapolations.'
-    Write(*,'(A,ES23.15)')    '        Final estimated value: ',Tk
-    Write(*,'(A,ES23.15)')    '        Prior estimated value: ',Tk0
+    Write(*,'(A,I0,A)')    'ERROR:  n_Cross_sections: db_Romberg:  Failed to converge in ',Tmax,' extrapolations.'
+    Write(*,'(A,ES23.15)') '        Final estimated value: ',Tk
+    Write(*,'(A,ES23.15)') '        Prior estimated value: ',Tk0
     ERROR STOP
 End Function db_Romberg
 
