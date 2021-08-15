@@ -223,7 +223,6 @@ Contains
 
 Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,aniso_dist,E_min,E_max,verbose) Result(CS)
     Use Kinds, Only: dp
-    Use Kinds, Only: id
     Use Sorting, Only: Union_Sort
     Use FileIO_Utilities, Only: max_path_len
     Use FileIO_Utilities, Only: slash
@@ -241,8 +240,7 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
     Logical, Intent(In), Optional :: verbose  !.TRUE. causes comprehensive output of cross section data to be generated during the 
                                               !       setup process.  Includes summary of ENDF data files read in and detailed 
                                               !       output of interpreted cross section data.
-                                              !       WARNING:  This VERBOSE output is placed in the resources folder and cannot be 
-                                              !                 redirected (sue me).
+                                              !       This VERBOSE output is placed in the folder specified by resources_directory.
     Integer :: n_elements
     Character(:), Allocatable :: file_name_start,ENDF_file_name
     Integer, Allocatable :: n_isotopes(:)
@@ -273,8 +271,7 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
     Character(15) :: v_string
     Integer, Parameter :: inter_pts = 5
     Real(dp) :: En,sT,sS,sA
-    Integer(id) :: c_start,c_end
-    Real(dp) :: dt_T0,dt_T300
+    Real(dp) :: T_broad
     Logical :: skip_section
     Real(dp) :: thresh
 
@@ -645,18 +642,16 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
                 Do i = 1,CS%n_iso
                     Write(v_unit,'(A,I0,A,I0,A)') Trim(isotope_names(i))//' ENDF tape contains ',n_abs_modes(i), & 
                                                 & ' absorption modes and ',n_inel_lev(i),' inelastic levels'
-                    Write(v_unit,'(A15,A26,A17,A26)') 'Absorption MT','Threshold Energy [keV]', & 
-                                                    & 'Inelastic MT','Threshold Energy [keV]'
-                    Write(v_unit,'(A15,A26,A17,A26)') '-------------','-----------------------', & 
-                                                    & '-------------','-----------------------'
+                    Write(v_unit,'(A10,A16,A11,A16)') ' Abs MT ','  E-thresh [keV]',' Inel MT ','  E-thresh [keV]'
+                    Write(v_unit,'(A10,A16,A11,A16)') '--------','  --------------','---------','  --------------'
                     Do j = 1,Max(n_abs_modes(i),n_inel_lev(i))
                         If (j .LE. n_abs_modes(i)) Then
-                            Write(v_unit,'(I15,ES26.16E3)',ADVANCE='NO') abs_modes(j,i),abs_thresh(j,i)/1000._dp
+                            Write(v_unit,'(I10,ES16.7E2)',ADVANCE='NO') abs_modes(j,i),abs_thresh(j,i)/1000._dp
                         Else
-                            Write(v_unit,'(A41)',ADVANCE='NO') ''
+                            Write(v_unit,'(A26)',ADVANCE='NO') ''
                         End If
                         If (j .LE. n_inel_lev(i)) Then
-                            Write(v_unit,'(I17,ES26.16E3)') inel_levs(j,i),inel_thresh(j,i)/1000._dp
+                            Write(v_unit,'(I11,ES16.7E2)') inel_levs(j,i),inel_thresh(j,i)/1000._dp
                         Else
                             Write(v_unit,*)
                         End If
@@ -684,10 +679,10 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
                 Write(v_unit,'(A)') half_dash_line
                 Write(v_unit,'(I0,A,I0,A,F0.2,A)') CS%n_E_uni,' unique points in unified grid out of ',n_p,', (', & 
                                                  & 100._dp*Real(CS%n_E_uni,dp)/Real(n_p,dp),'%)'
-                Write(v_unit,'(A9,2A26)') ' Index ',' E [keV]                ',' ln(E)                  '
-                Write(v_unit,'(A9,2A26)') '-------','------------------------','------------------------'
+                Write(v_unit,'(A9,2A16)') ' Index ',' E [keV]      ',' ln(E)        '
+                Write(v_unit,'(A9,2A16)') '-------','--------------','--------------'
                 Do i = 1,n_energies
-                    Write(v_unit,'(I9,2ES26.16E3)') i,CS%E_uni(i),CS%lnE_uni(i)
+                    Write(v_unit,'(I9,2ES16.7E2)') i,CS%E_uni(i),CS%lnE_uni(i)
                 End Do
             End If
         End If
@@ -954,18 +949,17 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
         Write(v_unit,'(A)') 'CROSS SECTION TRACES FOR VERIFICATION (T = 0 K)'
         Write(v_unit,'(A)') half_dash_line
         Write(v_unit,*)
-        Write(v_unit,'(A9,4A27)',ADVANCE='NO') ' Index ',' E [keV]                ',' Atmo sig-T [barns]     ', & 
-                                             &           ' Atmo sig-S [barns]     ',' Atmo sig-A [barns]     '
+        Write(v_unit,'(A6,4A16)',ADVANCE='NO') ' Index',' E [keV]      ','Atmo sig-T [b]', & 
+                                             &         'Atmo sig-S [b]','Atmo sig-A [b]'
         Do k = 1,CS%n_iso
-            Write(v_unit,'(3A27)',ADVANCE='NO') ' '//isotope_names(k)//' sig-T [barns]     ', & 
-                                              & ' '//isotope_names(k)//' sig-S [barns]     ', & 
-                                              & ' '//isotope_names(k)//' sig-A [barns]     '
+            Write(v_unit,'(3A16)',ADVANCE='NO') isotope_names(k)//' sig-T [b]', & 
+                                              & isotope_names(k)//' sig-S [b]', & 
+                                              & isotope_names(k)//' sig-A [b]'
         End Do
         Write(v_unit,*)
-        Write(v_unit,'(A9,4A27)',ADVANCE='NO') '-------','------------------------','------------------------', & 
-                                             & '------------------------','------------------------'
+        Write(v_unit,'(A6,4A16)',ADVANCE='NO') '------','--------------','--------------','--------------','--------------'
         Do k = 1,CS%n_iso
-            Write(v_unit,'(3A27)',ADVANCE='NO') '------------------------','------------------------','------------------------'
+            Write(v_unit,'(3A16)',ADVANCE='NO') '--------------','--------------','--------------'
         End Do
         Write(v_unit,*)
         Open(NEWUNIT = t_unit , FILE = 'n_cs_HASTE_summary_traces.txt' , STATUS = 'REPLACE' , ACTION = 'WRITE' , IOSTAT = stat)
@@ -975,23 +969,23 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
             Do j = 0,inter_pts+1
                 En = CS%E_uni(i) + Real(j,dp) * (CS%E_uni(i+1)-CS%E_uni(i)) / Real(inter_pts+1,dp)
                 If (j .EQ. 0) Then
-                    Write(v_unit,'(I9)',ADVANCE='NO') i
+                    Write(v_unit,'(I6)',ADVANCE='NO') i
                 Else If (j .EQ. inter_pts+1) Then
-                    Write(v_unit,'(I9)',ADVANCE='NO') i + 1
+                    Write(v_unit,'(I6)',ADVANCE='NO') i + 1
                 Else
-                    Write(v_unit,'(A9)',ADVANCE='NO') ''
+                    Write(v_unit,'(A6)',ADVANCE='NO') ''
                 End If
                 sT = CS%sig_T(En)
                 sS = CS%sig_S(En)
                 sA = CS%sig_A(En)
-                Write(v_unit,'(4ES27.16E3)',ADVANCE='NO') En , sT , sS , sA
-                Write(t_unit,'(4ES27.16E3)',ADVANCE='NO') En , sT , sS , sA
+                Write(v_unit,'(4ES16.7E2)',ADVANCE='NO') En , sT , sS , sA
+                Write(t_unit,'(4ES16.7E2)',ADVANCE='NO') En , sT , sS , sA
                 Do k = 1,CS%n_iso
                     sT = CS%sig_T(k,En)
                     sS = CS%sig_S(k,En)
                     sA = CS%sig_A(k,En)
-                    Write(v_unit,'(3ES27.16E3)',ADVANCE='NO') sT , sS , sA
-                    Write(t_unit,'(3ES27.16E3)',ADVANCE='NO') sT , sS , sA
+                    Write(v_unit,'(3ES16.7E2)',ADVANCE='NO') sT , sS , sA
+                    Write(t_unit,'(3ES16.7E2)',ADVANCE='NO') sT , sS , sA
                 End Do
                 Write(v_unit,*)
                 Write(t_unit,*)
@@ -1000,23 +994,23 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
         End Do
         Close(t_unit)
         !write cross section traces for total, scatter, and absorption for each isotope broadened to 300K
+        T_broad = 300._dp
         Write(v_unit,*)
         Write(v_unit,'(A)') half_dash_line
         Write(v_unit,'(A)') 'CROSS SECTION TRACES FOR VERIFICATION (T = 300 K)'
         Write(v_unit,'(A)') half_dash_line
         Write(v_unit,*)
-        Write(v_unit,'(A9,4A27)',ADVANCE='NO') ' Index ',' E [keV]                ',' Atmo sig-T [barns]     ', & 
-                                             &           ' Atmo sig-S [barns]     ',' Atmo sig-A [barns]     '
+        Write(v_unit,'(A6,4A16)',ADVANCE='NO') 'Index',' E [keV]      ','Atmo sig-T [b]', & 
+                                             &         'Atmo sig-S [b]','Atmo sig-A [b]'
         Do k = 1,CS%n_iso
-            Write(v_unit,'(3A27)',ADVANCE='NO') ' '//isotope_names(k)//' sig-T [barns]     ', & 
-                                              & ' '//isotope_names(k)//' sig-S [barns]     ', & 
-                                              & ' '//isotope_names(k)//' sig-A [barns]     '
+            Write(v_unit,'(3A16)',ADVANCE='NO') isotope_names(k)//' sig-T [b]', & 
+                                              & isotope_names(k)//' sig-S [b]', & 
+                                              & isotope_names(k)//' sig-A [b]'
         End Do
         Write(v_unit,*)
-        Write(v_unit,'(A9,4A27)',ADVANCE='NO') '-------','------------------------','------------------------', & 
-                                             & '------------------------','------------------------'
+        Write(v_unit,'(A6,4A16)',ADVANCE='NO') '------','--------------','--------------','--------------','--------------'
         Do k = 1,CS%n_iso
-            Write(v_unit,'(3A27)',ADVANCE='NO') '------------------------','------------------------','------------------------'
+            Write(v_unit,'(3A16)',ADVANCE='NO') '--------------','--------------','--------------'
         End Do
         Write(v_unit,*)
         Open(NEWUNIT = t_unit , FILE = 'n_cs_HASTE_summary_traces_300K.txt' , STATUS = 'REPLACE' , ACTION = 'WRITE' , IOSTAT = stat)
@@ -1026,23 +1020,23 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
             Do j = 0,inter_pts+1
                 En = CS%E_uni(i) + Real(j,dp) * (CS%E_uni(i+1)-CS%E_uni(i)) / Real(inter_pts+1,dp)
                 If (j .EQ. 0) Then
-                    Write(v_unit,'(I9)',ADVANCE='NO') i
+                    Write(v_unit,'(I6)',ADVANCE='NO') i
                 Else If (j .EQ. inter_pts+1) Then
-                    Write(v_unit,'(I9)',ADVANCE='NO') i + 1
+                    Write(v_unit,'(I6)',ADVANCE='NO') i + 1
                 Else
-                    Write(v_unit,'(A9)',ADVANCE='NO') ''
+                    Write(v_unit,'(A6)',ADVANCE='NO') ''
                 End If
-                sT = CS%sig_T(En,300._dp)
-                sS = CS%sig_S(En,300._dp)
-                sA = CS%sig_A(En,300._dp)
-                Write(v_unit,'(4ES27.16E3)',ADVANCE='NO') En , sT , sS , sA
-                Write(t_unit,'(4ES27.16E3)',ADVANCE='NO') En , sT , sS , sA
+                sT = CS%sig_T(En,T_broad)
+                sS = CS%sig_S(En,T_broad)
+                sA = CS%sig_A(En,T_broad)
+                Write(v_unit,'(4ES16.7E2)',ADVANCE='NO') En , sT , sS , sA
+                Write(t_unit,'(4ES16.7E2)',ADVANCE='NO') En , sT , sS , sA
                 Do k = 1,CS%n_iso
-                    sT = CS%sig_T(k,En,300._dp)
-                    sS = CS%sig_S(k,En,300._dp)
-                    sA = CS%sig_A(k,En,300._dp)
-                    Write(v_unit,'(3ES27.16E3)',ADVANCE='NO') sT , sS , sA
-                    Write(t_unit,'(3ES27.16E3)',ADVANCE='NO') sT , sS , sA
+                    sT = CS%sig_T(k,En,T_broad)
+                    sS = CS%sig_S(k,En,T_broad)
+                    sA = CS%sig_A(k,En,T_broad)
+                    Write(v_unit,'(3ES16.7E2)',ADVANCE='NO') sT , sS , sA
+                    Write(t_unit,'(3ES16.7E2)',ADVANCE='NO') sT , sS , sA
                 End Do
                 Write(v_unit,*)
                 Write(t_unit,*)
@@ -1070,28 +1064,26 @@ Subroutine Write_stored_sig(v_unit,sig,n_E_uni,E_uni)
         Write(v_unit,'(I8,I4)') sig%interp(k,1),sig%interp(k,2)
     End Do
     If (Any(sig%interp(:,2).EQ.4) .OR. Any(sig%interp(:,2).EQ.5)) Then !lnsigs are present
-        Write(v_unit,'(3A26,3A9)') '   E-keyed [keV]          ','   sig (b)                ','   ln(sig)                ', & 
-                                 & '    key  ','   index ','   map(s)'
-        Write(v_unit,'(3A26,3A9)') '  ------------------------','  ------------------------','  ------------------------', & 
-                                 & '  -------','  -------','  -------'
+        Write(v_unit,'(3A16,3A9)') ' E-keyed [keV]',' sig [b]      ',' ln(sig)      ',' key   ',' index ',' map(s)'
+        Write(v_unit,'(3A16,3A9)') '--------------','--------------','--------------','-------','-------','-------'
     Else  !ln(sig) not stored
-        Write(v_unit,'(2A26,3A9)') '   E-keyed [keV]          ','   sig (b)                ','    key  ','   index ','   map(s)'
-        Write(v_unit,'(2A26,3A9)') '  ------------------------','  ------------------------','  -------','  -------','  -------'
+        Write(v_unit,'(2A16,3A9)') ' E-keyed [keV]',' sig [b]      ',' key   ',' index ',' map(s)'
+        Write(v_unit,'(2A16,3A9)') '--------------','--------------','-------','-------','-------'
     End If
     Do k = 1,sig%n_sig
         If (Any(sig%interp(:,2).EQ.4) .OR. Any(sig%interp(:,2).EQ.5)) Then !lnsigs are present
-            Write(v_unit,'(3ES26.16E3,3I9)',ADVANCE='NO') E_uni(sig%E_key(k)), &
-                                                        & sig%sig(k), &
-                                                        & sig%lnsig(k), &
-                                                        & sig%E_key(k), &
-                                                        & k, &
-                                                        & sig%E_map(sig%E_key(k))
+            Write(v_unit,'(3ES16.7E2,3I9)',ADVANCE='NO') E_uni(sig%E_key(k)), &
+                                                       & sig%sig(k), &
+                                                       & sig%lnsig(k), &
+                                                       & sig%E_key(k), &
+                                                       & k, &
+                                                       & sig%E_map(sig%E_key(k))
         Else  !ln(sig) not stored
-            Write(v_unit,'(2ES26.16E3,3I9)',ADVANCE='NO') E_uni(sig%E_key(k)), &
-                                                        & sig%sig(k), &
-                                                        & sig%E_key(k), &
-                                                        & k, &
-                                                        & sig%E_map(sig%E_key(k))
+            Write(v_unit,'(2ES16.7E2,3I9)',ADVANCE='NO') E_uni(sig%E_key(k)), &
+                                                       & sig%sig(k), &
+                                                       & sig%E_key(k), &
+                                                       & k, &
+                                                       & sig%E_map(sig%E_key(k))
         End If
         If (k .EQ. 1) Then
             map_gap = sig%E_key(k) - 1
@@ -1124,10 +1116,10 @@ Subroutine Write_stored_AD(v_unit,d,n_E_uni,E_uni)
         Write(v_unit,'(A,I0,A)') 'Angular distribution is isotropic, ',d%n_da,' da points listed/stored.'
         RETURN
     End If
-    Write(v_unit,'(A26,3A9)') '   E-keyed [keV]          ','    key  ','   index ','   map(s)'
-    Write(v_unit,'(A26,3A9)') '  ------------------------','  -------','  -------','  -------'
+    Write(v_unit,'(A16,3A9)') ' E-keyed [keV]',' key   ',' index ',' map(s)'
+    Write(v_unit,'(A16,3A9)') '--------------','-------','-------','-------'
     Do k = 1,d%n_da
-       Write(v_unit,'(ES26.16E3,3I9)',ADVANCE='NO') E_uni(d%E_key(k)) , d%E_key(k) , k , d%E_map(d%E_key(k))
+       Write(v_unit,'(ES16.7E2,3I9)',ADVANCE='NO') E_uni(d%E_key(k)) , d%E_key(k) , k , d%E_map(d%E_key(k))
         If (k .EQ. 1) Then
             map_gap = d%E_key(k) - 1
         Else
@@ -1141,21 +1133,17 @@ Subroutine Write_stored_AD(v_unit,d,n_E_uni,E_uni)
         End If
         Write(v_unit,*)
         If (d%da(k)%is_Legendre) Then
-            Write(v_unit,'(A9,I7,A19)') '',d%da(k)%n_a,' Legendre Coeffs   '
-            Write(v_unit,'(A9,A26)') '','  ------------------------'
+            Write(v_unit,'(A9,I5,A11)') '',d%da(k)%n_a,' Legendre C'
+            Write(v_unit,'(A9,A16)')    '',         '--------------'
         Else !tabulated cosine pdf
-            Write(v_unit,'(A9,I7,A19,2A26)') '', & 
-                                           & d%da(k)%n_a, & 
-                                           & ' tabular Cosines   ', & 
-                                           & '    PDF                   ', & 
-                                           & '    ln(PDF)               '
-            Write(v_unit,'(A9,3A26)') '','  ------------------------','  ------------------------','  ------------------------'
+            Write(v_unit,'(A9,I5,A11,2A16)') '',d%da(k)%n_a,' Cosine    ',' PDF          ',' ln(PDF)      '
+            Write(v_unit,'(A9,3A16)') '',                '--------------','--------------','--------------'
         End If
         Do a = 1,d%da(k)%n_a
             If (d%da(k)%is_Legendre) Then
-                Write(v_unit,'(A9,ES26.16E3)') '',d%da(k)%a(a)
+                Write(v_unit,'(A9,ES16.7E2)')  '',d%da(k)%a(a)
             Else !tabulated cosine pdf
-                Write(v_unit,'(A9,3ES26.16E3)') '',d%da(k)%ua(1,a),Exp(d%da(k)%ua(2,a)),d%da(k)%ua(2,a)
+                Write(v_unit,'(A9,3ES16.7E2)') '',d%da(k)%ua(1,a),Exp(d%da(k)%ua(2,a)),d%da(k)%ua(2,a)
             End If
         End Do
     End Do
@@ -1169,9 +1157,9 @@ Subroutine Write_stored_res(v_unit,res)
     Type(res_sig_Type), Intent(In) :: res
     Integer :: l,r
 
-    Write(v_unit,'(2A26)') '   E-low [keV]            ','   E-high [keV]           '
-    Write(v_unit,'(2A26)') '  ------------------------','  ------------------------'
-    Write(v_unit,'(2ES26.16E3)') res%E_range(1),res%E_range(2)
+    Write(v_unit,'(2A16)') ' E-low [keV]  ',' E-high [keV] '
+    Write(v_unit,'(2A16)') '--------------','--------------'
+    Write(v_unit,'(2ES16.7E2)') res%E_range(1),res%E_range(2)
     If (res%is_RM) Then
         Write(v_unit,'(A)') '   Formalism:  Riech-Moore'
     Else If (res%is_SLBW) Then
@@ -1180,23 +1168,21 @@ Subroutine Write_stored_res(v_unit,res)
         Write(v_unit,'(A)') '   Formalism:  Multi Level Breit-Wigner'
     End If
     Do l = 1,res%n_L
-        Write(v_unit,'(A,I0,2(A,ES26.16E3))') '  Level ',l,' -- Channel Rad [1E-12cm]:',res%L(l)%a, & 
-                                                     & ', Scattering Rad [1E-12cm]:',res%L(l)%ap
-        Write(v_unit,'(A4,2A26)',ADVANCE='NO') '','   E-res [eV]             ','   Statistical Factor     '
+        Write(v_unit,'(A,I0,2(A,ES16.7E2))') '  Level ',l,' -- Channel Rad [1E-12cm]:',res%L(l)%a, & 
+                                                       & ', Scattering Rad [1E-12cm]:',res%L(l)%ap
+        Write(v_unit,'(A4,2A16)',ADVANCE='NO') '',' E-res [eV]   ',' aJ           '
         If (res%is_RM) Then
-            Write(v_unit,'(2A26)') '   Neutron Width          ','   Radiation Width        '
-            Write(v_unit,'(A4,4A26)') '','  ------------------------','  ------------------------', & 
-                                    & '  ------------------------','  ------------------------'
+            Write(v_unit,'(2A16)')       ' Neutron Width',' Rad Width    '
+            Write(v_unit,'(A4,4A16)') '','--------------','--------------','--------------','--------------'
         Else If (res%is_BW) Then
-            Write(v_unit,'(3A26)') '   Total Width            ','   Neutron Width          ','   Radiation Width        '
-            Write(v_unit,'(A4,5A26)') '','  ------------------------','  ------------------------', & 
-                                    & '  ------------------------','  ------------------------','  ------------------------'
+            Write(v_unit,'(3A16)')       ' Total Width  ',' Neutron Width',' Rad Width    '
+            Write(v_unit,'(A4,5A16)') '','--------------','--------------','--------------','--------------','--------------'
         End If
         Do r = 1,res%L(l)%n_r
             If (res%is_RM) Then
-                Write(v_unit,'(A4,6ES26.16E3)') '',res%L(l)%EraG(r,:)
+                Write(v_unit,'(A4,4ES16.7E2)') '',res%L(l)%EraG(r,1:4)
             Else If (res%is_MLBW) Then
-                Write(v_unit,'(A4,7ES26.16E3)') '',res%L(l)%EraG(r,:)
+                Write(v_unit,'(A4,5ES16.7E2)') '',res%L(l)%EraG(r,1:5)
             End If
         End Do
     End Do
