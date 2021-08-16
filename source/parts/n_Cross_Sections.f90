@@ -122,8 +122,9 @@ Module n_Cross_Sections
         Procedure, Pass :: sig_A_iso_db
         Procedure, Pass :: sig_T_A_all  !given energy, returns microscopic total and absorp cross sections for the atmosphere
         Procedure, Pass :: sig_T_A_iso  !given energy, returns microscopic total and absorp cross sections for a specific isotope
-        Procedure, Pass :: sig_T_A_db
-        GENERIC :: sig_T_A => sig_T_A_all , sig_T_A_iso
+        Procedure, Pass :: sig_T_A_db_all
+        Procedure, Pass :: sig_T_A_db_iso
+        GENERIC :: sig_T_A => sig_T_A_all , sig_T_A_iso , sig_T_A_db_all , sig_T_A_db_iso
         GENERIC :: sig_T => sig_T_all , sig_T_iso , sig_T_all_db , sig_T_iso_db
         GENERIC :: sig_S => sig_S_all , sig_S_iso , sig_S_all_db , sig_S_iso_db
         GENERIC :: sig_A => sig_A_all , sig_A_iso , sig_A_all_db , sig_A_iso_db
@@ -725,14 +726,14 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
             Call Read_sig_sect(ENDF_unit,Q_scratch,An_scratch,E_scratch,sig_scratch,Interp_scratch,n_p,n_r)
             If (Trim_CS_for_E(n_p,E_scratch,sig_scratch,n_r,Interp_scratch,E_min,E_max)) Then
                 CS%abs_cs(i)%MT_modes(j) = MT
-                Call Map_and_Store_CS( CS%n_E_uni, & 
-                                     & CS%E_uni, & 
-                                     & n_p, & 
-                                     & E_scratch, & 
-                                     & sig_scratch, & 
-                                     & n_r, & 
-                                     & Interp_Scratch, & 
-                                     & CS%abs_cs(i)%sig(j), & 
+                Call Map_and_Store_CS( CS%n_E_uni,            & 
+                                     & CS%E_uni,              & 
+                                     & n_p,                   & 
+                                     & E_scratch,             & 
+                                     & sig_scratch,           & 
+                                     & n_r,                   & 
+                                     & Interp_Scratch,        & 
+                                     & CS%abs_cs(i)%sig(j),   & 
                                      & CS%abs_cs(i)%thresh(j) )
             End If
             Deallocate(E_scratch,sig_scratch,Interp_scratch)
@@ -790,14 +791,14 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
         !the next read statement on ENDF_unit will read the first line of MF=3, MT=2
         Call Read_sig_sect(ENDF_unit,Q_scratch,CS%An(i),E_scratch,sig_scratch,Interp_scratch,n_p,n_r)
         If (Trim_CS_for_E(n_p,E_scratch,sig_scratch,n_r,Interp_scratch,E_min,E_max)) Then
-            Call Map_and_Store_CS( CS%n_E_uni, & 
-                                 & CS%E_uni, & 
-                                 & n_p, & 
-                                 & E_scratch, & 
-                                 & sig_scratch, & 
-                                 & n_r, & 
-                                 & Interp_Scratch, & 
-                                 & CS%lev_cs(i)%sig(0), & 
+            Call Map_and_Store_CS( CS%n_E_uni,            & 
+                                 & CS%E_uni,              & 
+                                 & n_p,                   & 
+                                 & E_scratch,             & 
+                                 & sig_scratch,           & 
+                                 & n_r,                   & 
+                                 & Interp_Scratch,        & 
+                                 & CS%lev_cs(i)%sig(0),   & 
                                  & CS%lev_cs(i)%thresh(0) )
         End If
         Deallocate(E_scratch,sig_scratch,Interp_scratch)
@@ -822,11 +823,11 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
             Else
                 CS%lev_cs(i)%da(0)%is_iso = .FALSE.
                 If (Trim_AD_for_E(n_p,E_scratch,Ang_dist_scratch,E_min,E_max)) Then
-                    Call Map_and_Store_AD( CS%n_E_uni, & 
-                                         & CS%E_uni, & 
-                                         & n_p, & 
-                                         & E_scratch, & 
-                                         & Ang_dist_scratch, & 
+                    Call Map_and_Store_AD( CS%n_E_uni,        & 
+                                         & CS%E_uni,          & 
+                                         & n_p,               & 
+                                         & E_scratch,         & 
+                                         & Ang_dist_scratch,  & 
                                          & CS%lev_cs(i)%da(0) )
                 End If
                 Deallocate(E_scratch,Ang_dist_scratch)
@@ -867,14 +868,14 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
             Call Read_sig_sect(ENDF_unit,Q_scratch,An_scratch,E_scratch,sig_scratch,Interp_scratch,n_p,n_r)
             If (Trim_CS_for_E(n_p,E_scratch,sig_scratch,n_r,Interp_scratch,E_min,E_max)) Then
                 CS%lev_cs(i)%Q(j) = Q_scratch
-                Call Map_and_Store_CS( CS%n_E_uni, & 
-                                        & CS%E_uni, & 
-                                        & n_p, & 
-                                        & E_scratch, & 
-                                        & sig_scratch, & 
-                                        & n_r, & 
-                                        & Interp_Scratch, & 
-                                        & CS%lev_cs(i)%sig(j), & 
+                Call Map_and_Store_CS( CS%n_E_uni,               & 
+                                        & CS%E_uni,              & 
+                                        & n_p,                   & 
+                                        & E_scratch,             & 
+                                        & sig_scratch,           & 
+                                        & n_r,                   & 
+                                        & Interp_Scratch,        & 
+                                        & CS%lev_cs(i)%sig(j),   & 
                                         & CS%lev_cs(i)%thresh(j) )
             End If
             Deallocate(E_scratch,sig_scratch,Interp_scratch)
@@ -1151,7 +1152,6 @@ Subroutine Write_stored_AD(v_unit,d,n_E_uni,E_uni)
 End Subroutine Write_stored_AD
 
 Subroutine Write_stored_res(v_unit,res)
-    Use Kinds, Only: dp
     Implicit None
     Integer, Intent(In) :: v_unit
     Type(res_sig_Type), Intent(In) :: res
@@ -2304,8 +2304,6 @@ Pure Subroutine sig_Resonance(res,E,sT,sS)
     Integer :: nS,nJ
     Complex(dp), Parameter :: z0 = CMPLX(0._dp,Kind=dp)
     Complex(dp), Parameter :: z1 = CMPLX(1._dp,Kind=dp)
-    Complex(dp), Parameter :: z2 = CMPLX(2._dp,Kind=dp)
-    Complex(dp), Parameter :: half_i = CMPLX(0._dp,0.5_dp,Kind=dp)
 
     sT = 0._dp
     sS = 0._dp
@@ -2522,17 +2520,41 @@ Pure Subroutine Broad_sig_start(E,M,T,v,gamma,vRmin,vRmax)
     vRmax = v + vT
 End Subroutine Broad_sig_start
 
-Subroutine sig_T_A_db(CS,E,T,sigT,sigA)
+Subroutine sig_T_A_db_all(CS,E,T,sigT,sigA)
+    Use Kinds, Only: dp
+    Implicit None
+    Class(CS_Type), Intent(In) :: CS
+    Real(dp), Intent(In) :: E ![kev]
+    Real(dp), Intent(In) :: T ![K]
+    Real(dp), Intent(Out) :: sigT,sigA
+
+    Call sig_T_A_db(CS,E,T,sigT,sigA)
+End Subroutine sig_T_A_db_all
+
+Subroutine sig_T_A_db_iso(CS,iso,E,T,sigT,sigA)
+    Use Kinds, Only: dp
+    Implicit None
+    Class(CS_Type), Intent(In) :: CS
+    Integer, Intent(In) :: iso
+    Real(dp), Intent(In) :: E ![kev]
+    Real(dp), Intent(In) :: T ![K]
+    Real(dp), Intent(Out) :: sigT,sigA
+
+    Call sig_T_A_db(CS,E,T,sigT,sigA,iso)
+End Subroutine sig_T_A_db_iso
+
+Subroutine sig_T_A_db(CS,E,T,sigT,sigA,iso)
     Use Kinds, Only: dp
     Use Global, Only: SqrtPi
     Use Utilities, Only: Bisection_Search
     Use Neutron_Utilities, Only: Neutron_Energy
     Use Neutron_Utilities, Only: Neutron_Speed
     Implicit None
-    Class(CS_Type), Intent(In) :: CS
+    Type(CS_Type), Intent(In) :: CS
     Real(dp), Intent(In) :: E ![kev]
     Real(dp), Intent(In) :: T ![K]
     Real(dp), Intent(Out) :: sigT,sigA
+    Integer, Intent(In), Optional :: iso
     Real(dp) :: v  ![km/s] neutron velocity
     Real(dp) :: gamma  ![km/s]
     Real(dp) :: vR_min,vR_max
@@ -2545,25 +2567,41 @@ Subroutine sig_T_A_db(CS,E,T,sigT,sigA)
     Call Broad_sig_start(E,CS%Mn,T,v,gamma,vR_min,vR_max)
     iE_min = Bisection_Search(Neutron_Energy(vR_min),CS%E_uni,CS%n_E_uni)
     If (Neutron_Energy(vR_max) .LE. CS%E_uni(iE_min)) Then  !only a single interval spanned in energy grid
-        sig_T_A = db_Romberg_T_A(CS,iE_min,vR_min,vR_max,gamma,v) * gamma / (SqrtPi * v**2)
+        If (Present(iso)) Then
+            sig_T_A = db_Romberg_T_A(CS,iE_min,vR_min,vR_max,gamma,v,iso) * gamma / (SqrtPi * v**2)
+        Else
+            sig_T_A = db_Romberg_T_A(CS,iE_min,vR_min,vR_max,gamma,v) * gamma / (SqrtPi * v**2)
+        End If
         sigT = sig_T_A(total)
         sigA = sig_T_A(absor)
         Return
     End If
     iE_max = Bisection_Search(Neutron_Energy(vR_max),CS%E_uni,CS%n_E_uni) - 1
-    !first interval (from E_min to first indexed E) is partial
-    sig_T_A = db_Romberg_T_A(CS,iE_min,vR_min,Neutron_Speed(CS%E_uni(iE_min)),gamma,v)
-    !middle intervals
-    Do i = iE_min,iE_max-1
-        sig_T_A = sig_T_A + db_Romberg_T_A(CS,i+1,Neutron_Speed(CS%E_uni(i)),Neutron_Speed(CS%E_uni(i+1)),gamma,v)
-    End Do
-    !last interval (from second to last indexed E to Emax) is partial, also apply normalization
-    sig_T_A = (sig_T_A + db_Romberg_T_A(CS,iE_max,Neutron_Speed(CS%E_uni(iE_max)),vR_max,gamma,v)) * gamma / (SqrtPi * v**2)
+    If (Present(iso)) Then
+        !first interval (from E_min to first indexed E) is partial
+        sig_T_A = db_Romberg_T_A(CS,iE_min,vR_min,Neutron_Speed(CS%E_uni(iE_min)),gamma,v,iso)
+        !middle intervals
+        Do i = iE_min,iE_max-1
+            sig_T_A = sig_T_A + db_Romberg_T_A(CS,i+1,Neutron_Speed(CS%E_uni(i)),Neutron_Speed(CS%E_uni(i+1)),gamma,v,iso)
+        End Do
+        !last interval (from second to last indexed E to Emax) is partial, also apply normalization
+        sig_T_A = sig_T_A + db_Romberg_T_A(CS,iE_max,Neutron_Speed(CS%E_uni(iE_max)),vR_max,gamma,v,iso)
+    Else
+        !first interval (from E_min to first indexed E) is partial
+        sig_T_A = db_Romberg_T_A(CS,iE_min,vR_min,Neutron_Speed(CS%E_uni(iE_min)),gamma,v)
+        !middle intervals
+        Do i = iE_min,iE_max-1
+            sig_T_A = sig_T_A + db_Romberg_T_A(CS,i+1,Neutron_Speed(CS%E_uni(i)),Neutron_Speed(CS%E_uni(i+1)),gamma,v)
+        End Do
+        !last interval (from second to last indexed E to Emax) is partial, also apply normalization
+        sig_T_A = sig_T_A + db_Romberg_T_A(CS,iE_max,Neutron_Speed(CS%E_uni(iE_max)),vR_max,gamma,v)
+    End If
+    sig_T_A = sig_T_A * gamma / (SqrtPi * v**2)
     sigT = sig_T_A(total)
     sigA = sig_T_A(absor)
 End Subroutine sig_T_A_db
 
-Function db_Romberg_T_A(CS,iE,vR1,vR2,gamma,v) Result(sig_T_A)
+Function db_Romberg_T_A(CS,iE,vR1,vR2,gamma,v,iso) Result(sig_T_A)
     Use Kinds, Only: dp
     Use Neutron_Utilities, Only: Neutron_Energy
     Implicit None
@@ -2572,6 +2610,7 @@ Function db_Romberg_T_A(CS,iE,vR1,vR2,gamma,v) Result(sig_T_A)
     Integer, Intent(In) :: iE
     Real(dp), Intent(In) :: vR1,vR2
     Real(dp), Intent(In) :: gamma,v
+    Integer, Intent(In), Optional :: iso
     Real(dp) :: sig_vR1(1:2),sig_vR2(1:2),sig_vR(1:2)
     Real(dp) :: s1(1:2),s2(1:2)
     Real(dp) :: vR
@@ -2585,8 +2624,13 @@ Function db_Romberg_T_A(CS,iE,vR1,vR2,gamma,v) Result(sig_T_A)
     Real(dp) :: fk    !multiplier for extrapolation steps
 
     !Initial trapezoid estimate
-    Call CS%sig_T_A(Neutron_Energy(vR1),sig_vR1(total),sig_vR1(absor),iE_put=iE)
-    Call CS%sig_T_A(Neutron_Energy(vR2),sig_vR2(total),sig_vR2(absor),iE_put=iE)
+    If (Present(iso)) Then
+        Call CS%sig_T_A(iso,Neutron_Energy(vR1),sig_vR1(total),sig_vR1(absor),iE_put=iE)
+        Call CS%sig_T_A(iso,Neutron_Energy(vR2),sig_vR2(total),sig_vR2(absor),iE_put=iE)
+    Else
+        Call CS%sig_T_A(Neutron_Energy(vR1),sig_vR1(total),sig_vR1(absor),iE_put=iE)
+        Call CS%sig_T_A(Neutron_Energy(vR2),sig_vR2(total),sig_vR2(absor),iE_put=iE)
+    End If
     s1 = 0.5_dp * (Broad_Integrand( vR1,sig_vR1,gamma,v) + Broad_Integrand( vR2,sig_vR2,gamma,v))
     s2 = 0.5_dp * (Broad_Integrand(-vR1,sig_vR1,gamma,v) + Broad_Integrand(-vR2,sig_vR2,gamma,v))
     h0 = vR2 - vR1
@@ -2598,7 +2642,11 @@ Function db_Romberg_T_A(CS,iE,vR1,vR2,gamma,v) Result(sig_T_A)
         h = h0 / Real(n,dp)
         Do j = 1,n-1,2  !only odd values of j, these are the NEW points at which to evaluate the integrand
             vR = vR1 + Real(j,dp)*h
-            Call CS%sig_T_A(Neutron_Energy(vR),sig_vR(total),sig_vR(absor),iE_put=iE)
+            If (Present(Iso)) Then
+                Call CS%sig_T_A(iso,Neutron_Energy(vR),sig_vR(total),sig_vR(absor),iE_put=iE)
+            Else
+                Call CS%sig_T_A(Neutron_Energy(vR),sig_vR(total),sig_vR(absor),iE_put=iE)
+            End If
             s1 = s1 + Broad_Integrand( vR,sig_vR,gamma,v)
             s2 = s2 + Broad_Integrand(-vR,sig_vR,gamma,v)
         End Do
@@ -2774,32 +2822,31 @@ Function db_Romberg(CS,iE,vR1,vR2,gamma,v,sig_type,iso) Result(sT)
     Real(dp) :: fk    !multiplier for extrapolation steps
 
     !Initial trapezoid estimate
-    Select Case (sig_type)
-        Case (db_choose_total_sig)
-            If (Present(iso)) Then
-                sig_vR1 = CS%sig_T(iso,Neutron_Energy(vR1),iE_put=iE)
-                sig_vR2 = CS%sig_T(iso,Neutron_Energy(vR2),iE_put=iE)
-            Else
-                sig_vR1 = CS%sig_T(Neutron_Energy(vR1),iE_put=iE)
-                sig_vR2 = CS%sig_T(Neutron_Energy(vR2),iE_put=iE)
-            End If
-        Case (db_choose_scatter_sig)
-            If (Present(iso)) Then
-                sig_vR1 = CS%sig_S(iso,Neutron_Energy(vR1),iE_put=iE)
-                sig_vR2 = CS%sig_S(iso,Neutron_Energy(vR2),iE_put=iE)
-            Else
-                sig_vR1 = CS%sig_S(Neutron_Energy(vR1),iE_put=iE)
-                sig_vR2 = CS%sig_S(Neutron_Energy(vR2),iE_put=iE)
-            End If
-        Case (db_choose_absorp_sig)
-            If (Present(iso)) Then
-                sig_vR1 = CS%sig_A(iso,Neutron_Energy(vR1),iE_put=iE)
-                sig_vR2 = CS%sig_A(iso,Neutron_Energy(vR2),iE_put=iE)
-            Else
-                sig_vR1 = CS%sig_A(Neutron_Energy(vR1),iE_put=iE)
-                sig_vR2 = CS%sig_A(Neutron_Energy(vR2),iE_put=iE)
-            End If
-    End Select
+    If (sig_type .EQ. db_choose_total_sig) Then
+        If (Present(iso)) Then
+            sig_vR1 = CS%sig_T(iso,Neutron_Energy(vR1),iE_put=iE)
+            sig_vR2 = CS%sig_T(iso,Neutron_Energy(vR2),iE_put=iE)
+        Else
+            sig_vR1 = CS%sig_T(Neutron_Energy(vR1),iE_put=iE)
+            sig_vR2 = CS%sig_T(Neutron_Energy(vR2),iE_put=iE)
+        End If
+    Else If (sig_type .EQ. db_choose_scatter_sig) Then
+        If (Present(iso)) Then
+            sig_vR1 = CS%sig_S(iso,Neutron_Energy(vR1),iE_put=iE)
+            sig_vR2 = CS%sig_S(iso,Neutron_Energy(vR2),iE_put=iE)
+        Else
+            sig_vR1 = CS%sig_S(Neutron_Energy(vR1),iE_put=iE)
+            sig_vR2 = CS%sig_S(Neutron_Energy(vR2),iE_put=iE)
+        End If
+    Else If (sig_type .EQ. db_choose_absorp_sig) Then
+        If (Present(iso)) Then
+            sig_vR1 = CS%sig_A(iso,Neutron_Energy(vR1),iE_put=iE)
+            sig_vR2 = CS%sig_A(iso,Neutron_Energy(vR2),iE_put=iE)
+        Else
+            sig_vR1 = CS%sig_A(Neutron_Energy(vR1),iE_put=iE)
+            sig_vR2 = CS%sig_A(Neutron_Energy(vR2),iE_put=iE)
+        End If
+    End If
     s1 = 0.5_dp * (Broad_Integrand( vR1,sig_vR1,gamma,v) + Broad_Integrand( vR2,sig_vR2,gamma,v))
     s2 = 0.5_dp * (Broad_Integrand(-vR1,sig_vR1,gamma,v) + Broad_Integrand(-vR2,sig_vR2,gamma,v))
     h0 = vR2 - vR1
@@ -2811,26 +2858,25 @@ Function db_Romberg(CS,iE,vR1,vR2,gamma,v,sig_type,iso) Result(sT)
         h = h0 / Real(n,dp)
         Do j = 1,n-1,2  !only odd values of j, these are the NEW points at which to evaluate the integrand
             vR = vR1 + Real(j,dp)*h
-            Select Case (sig_type)
-                Case (db_choose_total_sig)
-                    If (Present(iso)) Then
-                        sig_vR = CS%sig_T(iso,Neutron_Energy(vR),iE_put=iE)
-                    Else
-                        sig_vR = CS%sig_T(Neutron_Energy(vR),iE_put=iE)
-                    End If
-                Case (db_choose_scatter_sig)
-                    If (Present(iso)) Then
-                        sig_vR = CS%sig_S(iso,Neutron_Energy(vR),iE_put=iE)
-                    Else
-                        sig_vR = CS%sig_S(Neutron_Energy(vR),iE_put=iE)
-                    End If
-                Case (db_choose_absorp_sig)
-                    If (Present(iso)) Then
-                        sig_vR = CS%sig_A(iso,Neutron_Energy(vR),iE_put=iE)
-                    Else
-                        sig_vR = CS%sig_A(Neutron_Energy(vR),iE_put=iE)
-                    End If
-            End Select
+            If (sig_type .EQ. db_choose_total_sig) Then
+                If (Present(iso)) Then
+                    sig_vR = CS%sig_T(iso,Neutron_Energy(vR),iE_put=iE)
+                Else
+                    sig_vR = CS%sig_T(Neutron_Energy(vR),iE_put=iE)
+                End If
+            Else If (sig_type .EQ. db_choose_scatter_sig) Then
+                If (Present(iso)) Then
+                    sig_vR = CS%sig_S(iso,Neutron_Energy(vR),iE_put=iE)
+                Else
+                    sig_vR = CS%sig_S(Neutron_Energy(vR),iE_put=iE)
+                End If
+            Else If (sig_type .EQ. db_choose_absorp_sig) Then
+                If (Present(iso)) Then
+                    sig_vR = CS%sig_A(iso,Neutron_Energy(vR),iE_put=iE)
+                Else
+                    sig_vR = CS%sig_A(Neutron_Energy(vR),iE_put=iE)
+                End If
+            End If
             s1 = s1 + Broad_Integrand( vR,sig_vR,gamma,v)
             s2 = s2 + Broad_Integrand(-vR,sig_vR,gamma,v)
         End Do
@@ -2900,7 +2946,7 @@ Subroutine Write_Cross_Sections(CS,Broadened_CS,file_name)
                            & '-----------------------','-----------------------'
         Do i = 1,CS%n_E_uni
             Call CS%sig_T_A(CS%E_uni(i),sT,sA)
-            Call CS%sig_T_A_db(CS%E_uni(i),273.15_dp,sTb,sAb)
+            Call CS%sig_T_A(CS%E_uni(i),273.15_dp,sTb,sAb)
             Write(unit,'(5ES27.16E3)') CS%E_uni(i),sT,sTb,sA,sAb
         End Do
     Else
