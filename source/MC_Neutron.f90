@@ -369,13 +369,13 @@ Subroutine First_Event_Neutron(n,ScatMod,s,d,atm)
         If (xEff_top_atm .GT. 0._dp) Then
             If (s%exoatmospheric) Then
                 If (ScatMod%Doppler_Broaden) Then
-                    sigma_T1 = ScatMod%CS%sig_T_broad(Neutron_Energy(v1),atm%T(r_ca-Rc))
+                    sigma_T1 = ScatMod%CS%sig_T(Neutron_Energy(v1),atm%T(r_ca-Rc))
                 Else
                     sigma_T1 = ScatMod%CS%sig_T(Neutron_Energy(v1))
                 End If
             Else
                 If (ScatMod%Doppler_Broaden) Then
-                    sigma_T1 = ScatMod%CS%sig_T_broad(Neutron_Energy(v1),atm%T(n%Z))
+                    sigma_T1 = ScatMod%CS%sig_T(Neutron_Energy(v1),atm%T(n%Z))
                 Else
                     sigma_T1 = ScatMod%CS%sig_T(Neutron_Energy(v1))
                 End If
@@ -432,7 +432,7 @@ Subroutine Move_Neutron(n,ScatMod,atm,RNG,leaked)
         E_apparent = n%E
     End If
     If (ScatMod%Doppler_Broaden) Then
-        sigma_T = ScatMod%CS%sig_T_broad(E_apparent,atm%T(n%Z)) * mfp_per_barn_per_km_at_seaLevel
+        sigma_T = ScatMod%CS%sig_T(E_apparent,atm%T(n%Z)) * mfp_per_barn_per_km_at_seaLevel
     Else
         sigma_T = ScatMod%CS%sig_T(E_apparent) * mfp_per_barn_per_km_at_seaLevel
     End If
@@ -612,9 +612,9 @@ Subroutine Attempt_Next_Event(n,ScatMod,d,atm,scat,w_scat)
         E2sat = Neutron_Energy(v2sat)
         !Check if time and energy are in range of the detector grid
         If ( E2sat .LT. d%TE_grid(2)%min .OR. &
-        & E2sat .GT. d%TE_grid(2)%max .OR. &
-        & tof   .LT. d%TE_grid(1)%min .OR. &
-        & tof   .GT. d%TE_grid(1)%max      ) Then !No contribution from this neutron due to out of range of detector grid
+           & E2sat .GT. d%TE_grid(2)%max .OR. &
+           & tof   .LT. d%TE_grid(1)%min .OR. &
+           & tof   .GT. d%TE_grid(1)%max      ) Then !No contribution from this neutron due to out of range of detector grid
             !Record reason for no contribution and return
             If (E2sat.LT.d%TE_grid(2)%min .OR. E2sat.GT.d%TE_grid(2)%max) Then  !E out of range, check for time range
                 If (tof.LT.d%TE_grid(1)%min .OR. tof.GT.d%TE_grid(1)%max) Then  !t also out of range
@@ -632,7 +632,7 @@ Subroutine Attempt_Next_Event(n,ScatMod,d,atm,scat,w_scat)
         !DIRECTION AT ARRIVAL
         Omega_hat2_sat = Unit_Vector(v2sat)
         !WEIGHT ADJUSTMENTS... Scattered angle, divergence, absorption & scatter suppression, decay
-        w2 = n%weight !initial value (neutron wt multiplied by scatter wt for all mat/mech and exoatmospheric wt adj where applicable)
+        w2 = n%weight !initial value (neutron wt times scatter wt for all mat/mech and exoatmospheric wt adj where applicable)
         If (Present(w_scat)) w2 = w2 * w_scat
         !Adjust for scatter angle
         Omega_hat1_cm = Unit_Vector(v1cm)
@@ -643,13 +643,15 @@ Subroutine Attempt_Next_Event(n,ScatMod,d,atm,scat,w_scat)
         If (ScatMod%aniso_dist) Then
             If (scat%da_is_Legendre) Then
                 w2 = w2 * dmu0cm_dmu0 * Legendre_pdf(mu0cm,scat%n_a,scat%a(0:scat%n_a)) * inv_TwoPi
-            Else
-                w2 = w2 * dmu0cm_dmu0 * inv_TwoPi * Tabular_Cosine_pdf( mu0cm, & 
-                                                                    & scat%n_a1, & 
-                                                                    & scat%a_tab1(1:scat%n_a1,:), & 
-                                                                    & scat%n_a2, & 
-                                                                    & scat%a_tab2(1:scat%n_a2,:), & 
-                                                                    & scat%a_tab_Econv )
+            Else If (scat%da_is_iso) Then
+                w2 = w2 * dmu0cm_dmu0 * inv_FourPi
+            Else !If (scat%da_is_tab) Then
+                w2 = w2 * dmu0cm_dmu0 * inv_TwoPi * Tabular_Cosine_pdf( mu0cm,                      & 
+                                                                      & scat%n_a1,                  & 
+                                                                      & scat%a_tab1(1:scat%n_a1,:), & 
+                                                                      & scat%n_a2,                  & 
+                                                                      & scat%a_tab2(1:scat%n_a2,:), & 
+                                                                      & scat%a_tab_Econv            )
             End If
         Else
             w2 = w2 * dmu0cm_dmu0 * inv_FourPi
@@ -665,7 +667,7 @@ Subroutine Attempt_Next_Event(n,ScatMod,d,atm,scat,w_scat)
         w2 = w2 * (1._dp - scat%sig_A / scat%sig_T)
         !Adjust for interaction suppression on the path out of the atmosphere
         If (ScatMod%Doppler_Broaden) Then
-            sigma_T1 = ScatMod%CS%sig_T_broad(Neutron_Energy(v1),atm%T(n%Z))
+            sigma_T1 = ScatMod%CS%sig_T(Neutron_Energy(v1),atm%T(n%Z))
         Else
             sigma_T1 = ScatMod%CS%sig_T(Neutron_Energy(v1))
         End If
@@ -713,13 +715,15 @@ Subroutine Scatter_Neutron(n,ScatMod,RNG,absorbed)
     If (ScatMod%aniso_dist) Then
         If (ScatMod%scat%da_is_Legendre) Then
             mu0cm = Neutron_Anisotropic_mu0cm(ScatMod%scat%n_a,ScatMod%scat%a(0:ScatMod%scat%n_a),RNG)
-        Else
-            mu0cm = Neutron_Anisotropic_mu0cm( ScatMod%scat%n_a1, & 
+        Else If (ScatMod%scat%da_is_iso) Then
+            Omega_hat1_cm = Isotropic_Omega_hat(RNG)  !new isotropic direction
+        Else !If (ScatMod%scat%da_is_tab) Then
+            mu0cm = Neutron_Anisotropic_mu0cm( ScatMod%scat%n_a1,                          & 
                                              & ScatMod%scat%a_tab1(1:ScatMod%scat%n_a1,:), & 
-                                             & ScatMod%scat%n_a2, & 
+                                             & ScatMod%scat%n_a2,                          & 
                                              & ScatMod%scat%a_tab2(1:ScatMod%scat%n_a2,:), & 
-                                             & ScatMod%scat%a_tab_Econv, & 
-                                             & RNG )
+                                             & ScatMod%scat%a_tab_Econv,                   & 
+                                             & RNG                                         )
         End If
         omega0cm = Isotropic_Azimuth(RNG)
         Omega_hat1_cm = Scattered_Direction(mu0cm,omega0cm,ScatMod%scat%A_hat,ScatMod%scat%B_hat,ScatMod%scat%C_hat)

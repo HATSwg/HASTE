@@ -134,6 +134,7 @@ Function Setup_Atmosphere(setup_file_name,resources_dir,run_file_name,cs_file_na
     Logical, Allocatable :: diatomic(:)
     Integer :: i,j,k
     Character(4), Allocatable :: isotope_names(:)
+    Real(dp), Allocatable :: iso_fractions(:)
     Character(:), Allocatable :: f_name
     Real(dp) :: iso_fraction
     Integer :: n_absorption_modes,n_inelastic_lev
@@ -164,7 +165,7 @@ Function Setup_Atmosphere(setup_file_name,resources_dir,run_file_name,cs_file_na
                              & Z_top_atm,Z_bot_atm,wind_N,wind_E,composition
     NameList /csSetupList1/ n_elements
     NameList /csSetupList2/ el_fractions,n_isotopes
-    NameList /csSetupList3/ isotope_names,diatomic
+    NameList /csSetupList3/ isotope_names,diatomic,iso_fractions
     NameList /isoSetupList1/ iso_fraction,n_absorption_modes,n_inelastic_lev,has_resonance
     
     Open(NEWUNIT = setup_unit , FILE = setup_file_name , STATUS = 'OLD' , ACTION = 'READ' , IOSTAT = stat)
@@ -275,6 +276,7 @@ Function Setup_Atmosphere(setup_file_name,resources_dir,run_file_name,cs_file_na
         Allocate(atm%iso_ind(1:n_elements+1))
         Read(setup_unit,NML = csSetupList2)
         n_iso = Sum(n_isotopes)
+        Allocate(iso_fractions(1:n_elements))
         Allocate(isotope_names(1:n_iso))
         Allocate(diatomic(1:n_iso))
         Allocate(atm%iso_frac(1:n_iso))
@@ -292,16 +294,9 @@ Function Setup_Atmosphere(setup_file_name,resources_dir,run_file_name,cs_file_na
             End Do
         End Do
         Read(setup_unit,NML = csSetupList3)
+        atm%iso_frac = iso_fractions
         atm%diatomic = diatomic
         Close(setup_unit)
-        Do i = 1,n_iso
-            f_name = resources_dir//'cs'//slash//'n_cs'//slash//Trim(isotope_names(i))//slash//Trim(isotope_names(i))// & 
-                     & '_iso_setup.txt'
-            Open(NEWUNIT = setup_unit , FILE = f_name , STATUS = 'OLD' , ACTION = 'READ' , IOSTAT = stat)
-            Read(setup_unit,NML = isoSetupList1)
-            atm%iso_frac(i) = iso_fraction
-            Close(setup_unit)
-        End Do
         j = 1
         Do i = 1,n_elements
             atm%iso_frac(j:Sum(n_isotopes(1:i))) = atm%iso_frac(j:Sum(n_isotopes(1:i))) / & 

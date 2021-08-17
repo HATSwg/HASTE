@@ -34,7 +34,7 @@ interim_period = 300       ! Number of interim_units between interim outputs.
 
 &EstimatorSetupList
 !-----------------------------------------------------------------------------------------------------------------------------------
-n_neutron_histories = 100000  !number of neutron histories to run
+n_neutron_histories = 1000000  !number of neutron histories to run
 absolute_n_histories = .TRUE.     !<.TRUE.,.FALSE.>  TRUE sets number of histories to exactly the number specified above, FALSE 
                                   !                  will cause the simulation to run until the number of histories WITH 
                                   !                  CONTRIBUTIONS reaches the number above
@@ -51,7 +51,7 @@ RNG_seed = 7777777         ! Specific seed for random number generator(s)
 
 &AtmosphereList
 !-----------------------------------------------------------------------------------------------------------------------------------
-atmosphere_model = 'None'           !<'USstd1976','IsoThermal','None'>
+atmosphere_model = 'USstd1976'           !<'USstd1976','IsoThermal','None'>
                                          ! Selects an atmosphere model to determine the bulk properties of the scattering medium.
                                          ! 'None' will disable all scattering calculations and compute only the direct 
                                          !        contributions unattenuated by a scattering medium
@@ -63,14 +63,14 @@ Z_top_atm = 86.                          ![km]  Geometric height of top of atmos
 Z_bot_atm = 0.                           ![km]  Geometric height of bottom of atmosphere model
 wind_N = 0.                              ![km/s]  Northerly global wind velocity component
 wind_E = 0.                              ![km/s]  Easterly global wind velocity component
-composition = 'N14_O16'                      !<'All','N14_O16','N14_O16_Ar40','N14','N15','O16','O17','O18','Ar40'>
+composition = 'N14_O16_Ar40'                      !<'All','N14_O16','N14_O16_Ar40','N14','N15','O16','O17','O18','Ar40'>
                                          ! Selects from pre-formatted setup files for atmospheric compositions and cross sections
 !-----------------------------------------------------------------------------------------------------------------------------------
 /
 
 &NeutronScatterList
 !-----------------------------------------------------------------------------------------------------------------------------------
-n_scatters = 0                  ! Number of scatters to allow during a history, -1 sets no limit (the history will terminate based 
+n_scatters = -1                  ! Number of scatters to allow during a history, -1 sets no limit (the history will terminate based 
                                  ! on energy/time or roulette kill criteria)
 direct_contribution = .TRUE.     !<.TRUE.,.FALSE.>  Sets whether a first-event (direct contribution) is computed for each history,
                                  !                  MUST be TRUE for n_scatters = 0
@@ -91,9 +91,9 @@ roulette_weight = 0.1            ! Specifies rouletted weight threshold (in unit
 roulette_ratio = 10              ! 1/r particles rouletted survive, weight of surviving particles increased by factor of r
 E_min = 0.                       ![keV]  Min energy to include in cross sections data
 E_max = 20000.                   ![keV]  Max energy to include in cross sections data
-Gravity = .TRUE.                 !<.TRUE.,.FALSE.>  TRUE includes gravitational effects in determining the trajectory of a neutron 
+Gravity = .FALSE.                 !<.TRUE.,.FALSE.>  TRUE includes gravitational effects in determining the trajectory of a neutron 
                                  !                  to reach the detector
-inbound_trajectories = .TRUE.    !<.TRUE.,.FALSE.>  TRUE includes trajectories returning (due to gravity) from above the detector 
+inbound_trajectories = .FALSE.    !<.TRUE.,.FALSE.>  TRUE includes trajectories returning (due to gravity) from above the detector 
 Neutron_Decay = .TRUE.           !<.TRUE.,.FALSE.>  TRUE accounts for radioactive decay of free neutrons
 Doppler_Broaden = .FALSE.        !<.TRUE.,.FALSE.>  TRUE adds on-the-fly Doppler broadening for interaction cross sections via  
                                  !                  thermal motion sampling
@@ -107,7 +107,7 @@ Wind = .FALSE.                   !<.TRUE.,.FALSE.>  TRUE adds a global wind comp
 
 &NeutronSourceList
 !-----------------------------------------------------------------------------------------------------------------------------------
-source_geometry = 'Albedo'        !<'Point','Sphere_V','Sphere_S','Albedo'>
+source_geometry = 'Point'        !<'Point','Sphere_V','Sphere_S','Albedo'>
 r_source = 0.                    ![km]  Radius of the source sphere. Must be greater than radius of the earth for 'Albedo'.
 position_geometry = 'Celestial'  !<'Celestial','Cartesian'>  Specifies the coodinate system in which source position is provided 
 x_source = 0.                    ![km]  Used only for 'Cartesian' geometry
@@ -123,7 +123,7 @@ v_U_source = 0.                  ![km/s]  Upward velocity of source
 d_E_source = 0.                  ![km/s]  Easterly direction of 'front' of source
 d_N_source = 0.                  ![km/s]  Northerly direction of 'front' source
 d_U_source = -1.                 ![km/s]  Upward direction of 'front' source
-source_E_dist = 'Watt235'        !<'Line','Uniform','Watt235','Type03','Type05','Type08','Type13','Egroups','EAgroups'>
+source_E_dist = 'Line'        !<'Line','Uniform','Watt235','Type03','Type05','Type08','Type13','Egroups','EAgroups'>
                                  !  'Line' energy = E_high, 
                                  !  'Uniform' energy uniformly distributed E_high to E_low, 
                                  !  'Watt235' watt distribution for fission of U-235 from Kneif with cutoff energy at E_high,

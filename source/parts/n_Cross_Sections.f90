@@ -1115,6 +1115,7 @@ Subroutine Write_stored_AD(v_unit,d,n_E_uni,E_uni)
 
     If (d%is_iso) Then  !isotropic distribution, no data stored
         Write(v_unit,'(A,I0,A)') 'Angular distribution is isotropic, ',d%n_da,' da points listed/stored.'
+        Write(v_unit,*)
         RETURN
     End If
     Write(v_unit,'(A16,3A9)') ' E-keyed [keV]',' key   ',' index ',' map(s)'

@@ -53,7 +53,9 @@ Module Neutron_Scatter
         Real(dp) :: vA(1:3)  ![km/s] velocity vector of the target nucleus
         Integer :: level  !sampled level of scatter
         Real(dp) :: Q  !Q-value for chosen scatter level
+        Logical :: da_is_iso
         Logical :: da_is_Legendre
+        Logical :: da_is_tab
         Integer :: n_a  !number of scatter coeffiecents
         Real(dp), Allocatable :: a(:)  !anisotropic scatter coeffs
         Integer :: n_a1,n_a2  !number of tabulated cosine pdf pairs
@@ -296,14 +298,14 @@ Subroutine Sample_Scatter(ScatMod,n,atm,RNG)
     End If
     If (ScatMod%Doppler_Broaden) Then
         T = atm%T(n%Z)
-        Call ScatMod%CS%sig_T_A_broad(E_apparent,T,ScatMod%scat%sig_T,ScatMod%scat%sig_A)
+        Call ScatMod%CS%sig_T_A(E_apparent,T,ScatMod%scat%sig_T,ScatMod%scat%sig_A)
         Do i = 1,ScatMod%CS%n_iso
-            ScatMod%scat%iso_cs(i) = ScatMod%CS%sig_S_iso_broad(i,E_apparent,T)
+            ScatMod%scat%iso_cs(i) = ScatMod%CS%sig_S(i,E_apparent,T)
         End Do
     Else
         Call ScatMod%CS%sig_T_A(E_apparent,ScatMod%scat%sig_T,ScatMod%scat%sig_A,iE_get=E_index)
         Do i = 1,ScatMod%CS%n_iso
-            ScatMod%scat%iso_cs(i) = ScatMod%CS%sig_S_iso(i,E_apparent,iE_put=E_index)
+            ScatMod%scat%iso_cs(i) = ScatMod%CS%sig_S(i,E_apparent,iE_put=E_index)
         End Do
     End If
     ScatMod%scat%sig_A = ScatMod%scat%sig_A * mfp_per_barn_per_km_at_seaLevel  !convert to macroscopic cross section at sea-level
@@ -398,27 +400,36 @@ Subroutine Sample_Scatter(ScatMod,n,atm,RNG)
     End If
     lev = ScatMod%scat%level
     If (ScatMod%aniso_dist) Then
-        index1 = ScatMod%CS%lev_cs(iso)%da(lev)%E_map(E_index) - 1
-        index2 = ScatMod%CS%lev_cs(iso)%da(lev)%E_map(E_index)
-        E1 = ScatMod%CS%E_uni( ScatMod%CS%lev_cs(iso)%da(lev)%E_key( index1 ) )
-        E2 = ScatMod%CS%E_uni( ScatMod%CS%lev_cs(iso)%da(lev)%E_key( index2 ) )
-        If (ScatMod%CS%lev_cs(iso)%da(lev)%da(index1)%is_Legendre) Then  !angular dist is expressed in legendre coeffs
-            ScatMod%scat%da_is_legendre = .TRUE.
-            ScatMod%scat%n_a = MaxVal(ScatMod%CS%lev_cs(iso)%da(lev)%da(index1:index2)%n_a)
-            Allocate(a1(0:ScatMod%scat%n_a))
-            Allocate(a2(0:ScatMod%scat%n_a))
-            a1 = 0._dp
-            a2 = 0._dp
-            a1(0:ScatMod%CS%lev_cs(iso)%da(lev)%da(index1)%n_a) = ScatMod%CS%lev_cs(iso)%da(lev)%da(index1)%a
-            a2(0:ScatMod%CS%lev_cs(iso)%da(lev)%da(index2)%n_a) = ScatMod%CS%lev_cs(iso)%da(lev)%da(index2)%a
-            ScatMod%scat%a(0:ScatMod%scat%n_a) = Linear_Interp(E_cm,E1,E2,a1,a2)
-        Else !angular dist is expressed in tabulated cosine pdf values
+        If (ScatMod%CS%lev_cs(iso)%da(lev)%is_iso) Then
+            ScatMod%scat%da_is_iso = .TRUE.
             ScatMod%scat%da_is_legendre = .FALSE.
-            ScatMod%scat%n_a1 = ScatMod%CS%lev_cs(iso)%da(lev)%da(index1)%n_a
-            ScatMod%scat%n_a2 = ScatMod%CS%lev_cs(iso)%da(lev)%da(index2)%n_a
-            ScatMod%scat%a_tab1(:,1:ScatMod%scat%n_a1) = ScatMod%CS%lev_cs(iso)%da(lev)%da(index1)%ua
-            ScatMod%scat%a_tab2(:,1:ScatMod%scat%n_a2) = ScatMod%CS%lev_cs(iso)%da(lev)%da(index2)%ua
-            ScatMod%scat%a_tab_Econv = (E_cm - E1) / (E2 - E1)
+            ScatMod%scat%da_is_tab = .FALSE.
+        Else
+            index1 = ScatMod%CS%lev_cs(iso)%da(lev)%E_map(E_index) - 1
+            index2 = ScatMod%CS%lev_cs(iso)%da(lev)%E_map(E_index)
+            E1 = ScatMod%CS%E_uni( ScatMod%CS%lev_cs(iso)%da(lev)%E_key( index1 ) )
+            E2 = ScatMod%CS%E_uni( ScatMod%CS%lev_cs(iso)%da(lev)%E_key( index2 ) )
+            ScatMod%scat%da_is_iso = .FALSE.
+            If (ScatMod%CS%lev_cs(iso)%da(lev)%da(index1)%is_Legendre) Then  !angular dist is expressed in legendre coeffs
+                ScatMod%scat%da_is_legendre = .TRUE.
+                ScatMod%scat%da_is_tab = .FALSE.
+                ScatMod%scat%n_a = MaxVal(ScatMod%CS%lev_cs(iso)%da(lev)%da(index1:index2)%n_a)
+                Allocate(a1(0:ScatMod%scat%n_a))
+                Allocate(a2(0:ScatMod%scat%n_a))
+                a1 = 0._dp
+                a2 = 0._dp
+                a1(0:ScatMod%CS%lev_cs(iso)%da(lev)%da(index1)%n_a) = ScatMod%CS%lev_cs(iso)%da(lev)%da(index1)%a
+                a2(0:ScatMod%CS%lev_cs(iso)%da(lev)%da(index2)%n_a) = ScatMod%CS%lev_cs(iso)%da(lev)%da(index2)%a
+                ScatMod%scat%a(0:ScatMod%scat%n_a) = Linear_Interp(E_cm,E1,E2,a1,a2)
+            Else !angular dist is expressed in tabulated cosine pdf values
+                ScatMod%scat%da_is_legendre = .FALSE.
+                ScatMod%scat%da_is_tab = .TRUE.
+                ScatMod%scat%n_a1 = ScatMod%CS%lev_cs(iso)%da(lev)%da(index1)%n_a
+                ScatMod%scat%n_a2 = ScatMod%CS%lev_cs(iso)%da(lev)%da(index2)%n_a
+                ScatMod%scat%a_tab1(:,1:ScatMod%scat%n_a1) = ScatMod%CS%lev_cs(iso)%da(lev)%da(index1)%ua
+                ScatMod%scat%a_tab2(:,1:ScatMod%scat%n_a2) = ScatMod%CS%lev_cs(iso)%da(lev)%da(index2)%ua
+                ScatMod%scat%a_tab_Econv = (E_cm - E1) / (E2 - E1)
+            End If
         End If
     End If
     !speed of neutron after scatter is independent of direction in CM frame
@@ -573,34 +584,42 @@ Subroutine Set_Scatter_lev(ScatMod,scat,lev,E_cm,i_E_cm)
     scat%level = lev
     scat%Q = ScatMod%CS%lev_cs(scat%target_index)%Q(lev)
     If (ScatMod%aniso_dist) Then  !get angular distribution coeffs
-        index1 = ScatMod%CS%lev_cs(scat%target_index)%da(lev)%E_map(i_E_cm) - 1
-        index2 = ScatMod%CS%lev_cs(scat%target_index)%da(lev)%E_map(i_E_cm)
-        E1 = ScatMod%CS%E_uni( ScatMod%CS%lev_cs(scat%target_index)%da(lev)%E_key( index1 ) )
-        E2 = ScatMod%CS%E_uni( ScatMod%CS%lev_cs(scat%target_index)%da(lev)%E_key( index2 ) )
-        If (ScatMod%CS%lev_cs(scat%target_index)%da(lev)%da(index1)%is_Legendre) Then  !angular dist is expressed in legendre coeffs
-            scat%da_is_legendre = .TRUE.
-            scat%n_a = MaxVal(ScatMod%CS%lev_cs(scat%target_index)%da(lev)%da(index1:index2)%n_a)
-            Allocate(a1(0:scat%n_a))
-            Allocate(a2(0:scat%n_a))
-            a1 = 0._dp
-            a2 = 0._dp
-            a1(0:ScatMod%CS%lev_cs(scat%target_index)%da(lev)%da(index1)%n_a) = &
-                                                                         & ScatMod%CS%lev_cs(scat%target_index)%da(lev)%da(index1)%a
-            a2(0:ScatMod%CS%lev_cs(scat%target_index)%da(lev)%da(index2)%n_a) = &
-                                                                         & ScatMod%CS%lev_cs(scat%target_index)%da(lev)%da(index2)%a
-            scat%a(0:scat%n_a) = Linear_Interp(E_cm,E1,E2,a1,a2)
-        Else !angular dist is expressed in tabulated cosine pdf values
+        ASSOCIATE ( ScatMod_lev_da => ScatMod%CS%lev_cs(scat%target_index)%da(lev) )
+        If (ScatMod_lev_da%is_iso) Then
+            scat%da_is_iso = .TRUE.
             scat%da_is_legendre = .FALSE.
-            scat%n_a1 = ScatMod%CS%lev_cs(scat%target_index)%da(lev)%da(index1)%n_a
-            scat%n_a2 = ScatMod%CS%lev_cs(scat%target_index)%da(lev)%da(index2)%n_a
-            scat%a_tab1(:,1:scat%n_a1) = ScatMod%CS%lev_cs(scat%target_index)%da(lev)%da(index1)%ua
-            scat%a_tab2(:,1:scat%n_a2) = ScatMod%CS%lev_cs(scat%target_index)%da(lev)%da(index2)%ua
-            scat%a_tab_Econv = (E_cm - E1) / (E2 - E1)
+            scat%da_is_tab = .FALSE.
+        Else
+            index1 = ScatMod_lev_da%E_map(i_E_cm) - 1
+            index2 = ScatMod_lev_da%E_map(i_E_cm)
+            E1 = ScatMod%CS%E_uni( ScatMod_lev_da%E_key( index1 ) )
+            E2 = ScatMod%CS%E_uni( ScatMod_lev_da%E_key( index2 ) )
+            scat%da_is_iso = .FALSE.
+            If (ScatMod_lev_da%da(index1)%is_Legendre) Then  !angular dist is expressed in legendre coeffs
+                scat%da_is_legendre = .TRUE.
+                scat%da_is_tab = .FALSE.
+                scat%n_a = MaxVal(ScatMod_lev_da%da(index1:index2)%n_a)
+                Allocate(a1(0:scat%n_a))
+                Allocate(a2(0:scat%n_a))
+                a1 = 0._dp
+                a2 = 0._dp
+                a1(0:ScatMod_lev_da%da(index1)%n_a) = ScatMod_lev_da%da(index1)%a
+                a2(0:ScatMod_lev_da%da(index2)%n_a) = ScatMod_lev_da%da(index2)%a
+                scat%a(0:scat%n_a) = Linear_Interp(E_cm,E1,E2,a1,a2)
+            Else !angular dist is expressed in tabulated cosine pdf values
+                scat%da_is_legendre = .FALSE.
+                scat%da_is_tab = .TRUE.
+                scat%n_a1 = ScatMod_lev_da%da(index1)%n_a
+                scat%n_a2 = ScatMod_lev_da%da(index2)%n_a
+                scat%a_tab1(:,1:scat%n_a1) = ScatMod_lev_da%da(index1)%ua
+                scat%a_tab2(:,1:scat%n_a2) = ScatMod_lev_da%da(index2)%ua
+                scat%a_tab_Econv = (E_cm - E1) / (E2 - E1)
+            End If
         End If
+        End ASSOCIATE
     End If
     !speed of neutron after scatter is independent of direction in CM frame
-    scat%s1cm = Neutron_Speed( ( E_cm + scat%An * Neutron_Energy(scat%vA - scat%u) - scat%Q) * &
-                               & scat%An / (scat%An + 1._dp) )
+    scat%s1cm = Neutron_Speed( ( E_cm + scat%An * Neutron_Energy(scat%vA - scat%u) - scat%Q) * scat%An / (scat%An + 1._dp) )
 End Subroutine Set_Scatter_lev
 
 Function Air_Velocity(Rotating_Earth,Wind,n,atm) Result(vA)

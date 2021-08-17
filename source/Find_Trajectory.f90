@@ -215,7 +215,8 @@ Subroutine Next_Event_Trajectory(sat, Gravity, r1, t1, s1cm, u_vec, outbound_sea
                 ds_2 = ds
             End If
             !Proceed with False-Position w/ Illinois
-            Do
+            !HACK Iteration limit prevents stalling of the bracketing method at expense of missing some rendezvous
+            Do i_lim = 1,1000
                 tof_old = tof
                 ds_old = ds
                 !False-Position for next TOF

@@ -37,11 +37,11 @@
 !   0.9    Major portability revision: gFortran compiler, IA32/IA64/ARM 
 !          architectures now supported
 !   0.10   Add albedo sources and limited-function adjoint solver routines.
+!   0.11   Revise neutron cross sections data and procedures.
 !-------------------------------------------------------------------------------
 Program HASTE
 
 Use Kinds, Only: dp  !double precision real
-Use Kinds, Only: il  !long integer
 Use Kinds, Only: id  !double integer
 Use Random_Numbers, Only: RNG_Type
 Use Random_Numbers, Only: Setup_RNG
@@ -81,7 +81,7 @@ Use FileIO_Utilities, Only: Delta_Time
 Implicit None
 
 Character(max_line_len), Parameter :: title = 'High-Altitude to Space Transport Estimator for Neutrons (HASTEn)'
-Character(max_line_len), Parameter :: ver =   '    v0.10.00, 2 Jun 2020'
+Character(max_line_len), Parameter :: ver =   '    v0.11.00, 18 Aug 2021'
 Integer(id) :: n_histories
 Logical :: absolute_n_histories  !specifies whether number of histories is an absolute limit or a target number of contributions   
 Logical :: prompt_exit  !specifies whether the simulation will wait for user unput before exiting

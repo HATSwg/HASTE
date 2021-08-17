@@ -62,6 +62,6 @@ $COMP_NAME $FORT_FLAGS -o ${BLD_PATH}HASTE${EXT} ${SRC_PATH}${FNAME}.f90 $OBJ_FI
 echo "Copying resource files..."
 rm -fr ${BLD_PATH}Resources
 cp -r ../source/resources ${BLD_PATH}Resources
-cp -r ../source/common/resources ${BLD_PATH}Resources
+cp -r ../source/common/resources/. ${BLD_PATH}Resources
 mv -f ${BLD_PATH}Resources/HASTE_Setup.txt ${BLD_PATH}HASTE_Setup.txt
 echo "Done."
