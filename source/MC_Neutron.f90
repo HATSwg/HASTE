@@ -60,6 +60,7 @@ Subroutine Do_Neutron(s,d,atm,ScatMod,RNG,contributed)
                 Call Next_Event_Neutron(n,ScatMod,d,atm,RNG)
                 Exit
             Else If (ScatMod%estimate_each_scatter) Then  !Scatter to detector and continue
+Print*,scatter
                 Call Next_Event_Neutron(n,ScatMod,d,atm,RNG)
             End If
             !Scatter into new random direction and check for absorption
@@ -71,17 +72,16 @@ Subroutine Do_Neutron(s,d,atm,ScatMod,RNG,contributed)
             If (ScatMod%n_scatters .EQ. -1) Then  !check kill criteria
                 If (Kill_Neutron(n%t,n%E,d%TE_Grid(1)%max,d%TE_grid(2)%min,ScatMod%n_kills(1:2))) Exit
                 If (ScatMod%roulette) Then
-                    If ( Roulette_Neutron( n%weight, & 
-                                        & ScatMod%roulette_weight, & 
-                                        & ScatMod%roulette_rate, & 
-                                        & ScatMod%roulette_mult, & 
-                                        & ScatMod%n_kills(3), & 
-                                        & RNG ) & 
-                    & ) Exit
+                    If ( Roulette_Neutron( n%weight,                & 
+                                         & ScatMod%roulette_weight, & 
+                                         & ScatMod%roulette_rate,   & 
+                                         & ScatMod%roulette_mult,   & 
+                                         & ScatMod%n_kills(3),      & 
+                                         & RNG                      ) ) Exit
                 End If
-            Else  !increment the scatter count and continue
-                scatter = scatter + 1
             End If
+            !increment the scatter count and continue
+            scatter = scatter + 1
         End Do
     Else !(n_scatters .EQ. 0), kill for final simulation position
         ScatMod%n_kills(6) = ScatMod%n_kills(6) + 1_id
@@ -498,6 +498,7 @@ Subroutine Next_Event_Neutron(n,ScatMod,d,atm,RNG)
         Call ScatMod%Set_Scatter_prep(scat)
         !set scatter parameters for each material/mechanism and compute next event
         Do iso = 1,ScatMod%CS%n_iso
+Print*,'    ',iso
             Call ScatMod%Set_Scatter_iso(n,atm,RNG,scat,iso,n_lev,E_cm,i_E_cm)
             If (ScatMod%elastic_only) Then
                 Call ScatMod%Set_Scatter_lev(scat,0,E_cm,i_E_cm)
@@ -505,6 +506,7 @@ Subroutine Next_Event_Neutron(n,ScatMod,d,atm,RNG)
             Else If (scat%iso_cs(iso) .GT. 0._dp) Then
                 Do lev = 0,n_lev
                     Call ScatMod%Set_Scatter_lev(scat,lev,E_cm,i_E_cm)
+Print*,'        ',lev
                     Call Attempt_Next_Event(n,ScatMod,d,atm,scat,scat%iso_cs(iso)*scat%lev_cs(lev))
                 End Do
             End If

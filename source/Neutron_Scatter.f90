@@ -230,7 +230,7 @@ Function Setup_Scatter_Model(setup_file_name,resources_directory,cs_setup_file,r
     ScatMod%n_no_tally = 0_id
     ScatMod%n_uncounted = 0_id
     If (atm_model_i .NE. -1) Then !load cross sections
-        ScatMod%CS = Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ScatMod%aniso_dist,E_min,E_max)
+        ScatMod%CS = Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ScatMod%aniso_dist,E_min,E_max,verbosity=2)
         ScatMod%cs_loaded = .TRUE.
         !initialize scatter CS arrays for sampled scatters, except the lev_cs array (used for sampled scatters)
         Allocate(ScatMod%scat%a(0:ScatMod%CS%n_a_max))

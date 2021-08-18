@@ -222,7 +222,7 @@ Module n_Cross_Sections
 
 Contains
 
-Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,aniso_dist,E_min,E_max,verbose) Result(CS)
+Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,aniso_dist,E_min,E_max,verbosity) Result(CS)
     Use Kinds, Only: dp
     Use Sorting, Only: Union_Sort
     Use FileIO_Utilities, Only: max_path_len
@@ -238,10 +238,17 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
     Logical, Intent(In) :: elastic_only
     Logical, Intent(In) :: aniso_dist
     Real(dp), Intent(In) :: E_min,E_max
-    Logical, Intent(In), Optional :: verbose  !.TRUE. causes comprehensive output of cross section data to be generated during the 
-                                              !       setup process.  Includes summary of ENDF data files read in and detailed 
-                                              !       output of interpreted cross section data.
-                                              !       This VERBOSE output is placed in the folder specified by resources_directory.
+    Integer, Intent(In), Optional :: verbosity  ! >0 causes comprehensive output of cross section data to be generated during the 
+                                                ! setup process.  Includes summary of ENDF data files read in and detailed output 
+                                                ! of interpreted cross section data.  This output is placed in the folder specified 
+                                                ! by resources_directory.
+                                                !    1 = basic information on the content of the ENDF data file is output
+                                                !    2 = (includes 1) ENDF data (as stored) is output to file
+                                                !    3 = (includes 1 & 2) Cross sections (total, scatter, absorption) for each 
+                                                !        isotope are written to file for plotting
+                                                !    4 = (includes 1,2, & 3) Cross sections (total, scatter, absorption) doppler 
+                                                !        broadened to 300K for each isotope are written to file for plotting
+
     Integer :: n_elements
     Character(:), Allocatable :: file_name_start,ENDF_file_name
     Integer, Allocatable :: n_isotopes(:)
@@ -268,7 +275,8 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
     Real(dp) :: ZAP,AWP
     Character(80) :: trash_c
     Real(dp) :: trash_r
-    Logical :: v,first_time
+    Logical :: first_time
+    Logical :: v_basic,v_full,v_burn0,v_burn300
     Character(15) :: v_string
     Integer, Parameter :: inter_pts = 5
     Real(dp) :: En,sT,sS,sA
@@ -280,10 +288,15 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
     NameList /csSetupList2/ el_fractions,n_isotopes
     NameList /csSetupList3/ isotope_names,iso_fractions,diatomic
 
-    If (Present(verbose)) Then
-        v = verbose
-    Else
-        v = .FALSE. !default is NOT verbose
+    v_basic = .FALSE. !default is NOT verbose
+    v_full = .FALSE. !default is NOT verbose
+    v_burn0 = .FALSE. !default is NOT verbose
+    v_burn300 = .FALSE. !default is NOT verbose
+    If (Present(verbosity)) Then
+        If (verbosity .GE. 1) v_basic = .TRUE.
+        If (verbosity .GE. 2) v_full = .TRUE.
+        If (verbosity .GE. 3) v_burn0 = .TRUE.
+        If (verbosity .GE. 4) v_burn300 = .TRUE.
     End If
     !read namelists from cross sections setup file
     Allocate(Character(max_path_len) :: file_name_start)
@@ -320,7 +333,7 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
     Allocate(CS%has_res_cs(1:CS%n_iso))
     CS%has_res_cs = .FALSE.
     Allocate(CS%res_cs(1:CS%n_iso))
-    If (v) Then  !create files for verbose output
+    If (v_basic) Then  !create file for verbose output
         Open(NEWUNIT = v_unit , FILE = 'n_cs_HASTE_summary.txt' , STATUS = 'REPLACE' , ACTION = 'WRITE' , IOSTAT = stat)
         If (stat .NE. 0) Call Output_Message( 'ERROR:  Cross_Sections: Setup_Cross_Sections:  File open error, ' & 
                                             & //'n_cs_HASTE_summary.txt'//', IOSTAT=',stat,kill=.TRUE. )
@@ -338,7 +351,7 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
     !FIRST TIME: Count interactions and total number of energies for unified list
     !SECOND TIME: Read in ALL (including duplicates) the energies and generate unified list
         If (first_time) Then  !FIRST TIME
-            If (v) Then
+            If (v_basic) Then
                 Write(v_unit,'(A)') half_dash_line
                 Write(v_unit,'(A)') 'ENDF TAPE FILE INVENTORY'
                 Write(v_unit,'(A)') half_dash_line
@@ -373,7 +386,7 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
             If (stat .NE. 0) Call Output_Message( 'ERROR:  Cross_Sections: Setup_Cross_Sections:  File open error, ' & 
                                                 & //ENDF_file_name//', IOSTAT=',stat,kill=.TRUE. )
             !count energies in absorption, elastic, and inelastic files (MFs 3, 4, and 6)
-            If (first_time .AND. v) v_string = Trim(isotope_names(i))//' ENDF file:'  !FIRST TIME
+            If (first_time .AND. v_basic) v_string = Trim(isotope_names(i))//' ENDF file:'  !FIRST TIME
             DO_SECTIONS: Do
                 !check next section type
                 Read(ENDF_unit,'(A71,I1,I3,I5)') trash_c,MF,MT,line_num
@@ -384,7 +397,7 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
                         If (MF .GT. 0) Exit NEXT_MF
                     End Do NEXT_MF
                 End If
-                If (first_time .AND. v) Then  !FIRST TIME
+                If (first_time .AND. v_basic) Then  !FIRST TIME
                     Write(v_unit,'(A15,A4,I0,A4,I0,A1)',ADVANCE='NO') v_string,' MF=',MF,' MT=',MT,' '
                     v_string = ''
                 End If
@@ -392,7 +405,7 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
                     skip_section = .FALSE.
                     If ( Any(MT_excluded .EQ. MT) .OR. & 
                        & (MF.EQ.6 .AND. Any(MT_disappearance.EQ.MT)) ) Then !this type/file is excluded, advance past it
-                        If (first_time .AND. v) Write(v_unit,'(A)',ADVANCE='YES') ' - excluded'  !FIRST TIME
+                        If (first_time .AND. v_basic) Write(v_unit,'(A)',ADVANCE='YES') ' - excluded'  !FIRST TIME
                         skip_section = .TRUE.
                     Else If (MF .EQ. 3) Then !also need to check if range of energies has values between (E_min,E_max)
                         Read(ENDF_unit,*)
@@ -402,7 +415,7 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
                         Backspace(ENDF_unit)
                         Backspace(ENDF_unit)
                         If (thresh/1000._dp .GE. E_max) Then !energy out of range
-                            If (first_time .AND. v) Write(v_unit,'(A)',ADVANCE='YES') ' - E out of range'  !FIRST TIME
+                            If (first_time .AND. v_basic) Write(v_unit,'(A)',ADVANCE='YES') ' - E out of range'  !FIRST TIME
                             skip_section = .TRUE.
                         End If
                     End If
@@ -412,7 +425,7 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
                         !cycle to start next section
                         Cycle DO_SECTIONS
                     Else
-                        If (first_time .AND. v) Write(v_unit,'(A)',ADVANCE='NO') ' - counted'  !FIRST TIME
+                        If (first_time .AND. v_basic) Write(v_unit,'(A)',ADVANCE='NO') ' - counted'  !FIRST TIME
                     End If
                     !get number of energies in this MF 3, 4, or 6 section
                     Select Case (MF)
@@ -420,15 +433,15 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
                             If (first_time) Then  !FIRST TIME
                                 If (Any(MT_disappearance .EQ. MT)) Then
                                     n_abs_modes(i) = n_abs_modes(i) + 1
-                                    If (v) Write(v_unit,'(A)',ADVANCE='NO') ', disappearance'
+                                    If (v_basic) Write(v_unit,'(A)',ADVANCE='NO') ', disappearance'
                                 Else If (Any(MT_inelastic .EQ. MT)) Then
                                     n_inel_lev(i) = n_inel_lev(i) + 1
-                                    If (v) Write(v_unit,'(A)',ADVANCE='NO') ', inelastic'
+                                    If (v_basic) Write(v_unit,'(A)',ADVANCE='NO') ', inelastic'
                                 End If
                             End If
                             Read(ENDF_unit,'(A55,I11)') trash_c, n_p
                             If (first_time) Then  !FIRST TIME
-                                If (v) Write(v_unit,'(A,I0,A)',ADVANCE='YES') ', ',n_p,' E-points'
+                                If (v_basic) Write(v_unit,'(A,I0,A)',ADVANCE='YES') ', ',n_p,' E-points'
                             Else  !SECOND TIME
                                 Read(ENDF_unit,*)
                                 Do j = 1,n_p,3
@@ -484,7 +497,7 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
                                 End Do
                             End If
                         Case (4)
-                            If (first_time .AND. v) Then  !FIRST TIME
+                            If (first_time .AND. v_basic) Then  !FIRST TIME
                                 If (Any(MT_disappearance.EQ.MT)) Then
                                     Write(v_unit,'(A)',ADVANCE='NO') ', disappearance'
                                 Else If (Any(MT_inelastic.EQ.MT)) Then
@@ -501,7 +514,7 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
                                 If (LTT .EQ. 0) Then !distribution is assumed isotropic over all energies
                                     n_p = 0
                                     n_p_2 = 0
-                                    If (v) Write(v_unit,'(A)',ADVANCE='YES') ', isotropic'
+                                    If (v_basic) Write(v_unit,'(A)',ADVANCE='YES') ', isotropic'
                                 Else If (LTT .EQ. 3) Then !there is a second range of energies later in the section
                                     !advance in the file to the end of the Legendre section
                                     Do j = 1,n_p
@@ -518,10 +531,10 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
                                     Read(ENDF_unit,*)
                                     !first entry of next line is number of additional energy points
                                     Read(ENDF_unit,'(I11)') n_p_2
-                                    If (v) Write(v_unit,'(A,I0,A,I0,A)',ADVANCE='YES') ', ',n_p,' + ',n_p_2,' E-points'
+                                    If (v_basic) Write(v_unit,'(A,I0,A,I0,A)',ADVANCE='YES') ', ',n_p,' + ',n_p_2,' E-points'
                                 Else
                                     n_p_2 = 0
-                                    If (v) Write(v_unit,'(A,I0,A)',ADVANCE='YES') ', ',n_p,' E-points'
+                                    If (v_basic) Write(v_unit,'(A,I0,A)',ADVANCE='YES') ', ',n_p,' E-points'
                                 End If
                                 n_p = n_p + n_p_2
                             Else  !SECOND TIME
@@ -585,7 +598,7 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
                                 End If
                             End If
                         Case(6)
-                            If (first_time .AND. v) Then  !FIRST TIME
+                            If (first_time .AND. v_basic) Then  !FIRST TIME
                                 If (Any(MT_disappearance.EQ.MT)) Then
                                     Write(v_unit,'(A)',ADVANCE='NO') ', disappearance'
                                 Else If (Any(MT_inelastic.EQ.MT)) Then
@@ -604,7 +617,7 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
                             Read(ENDF_unit,*)
                             If (first_time) Then  !FIRST TIME
                                 n_p_2 = 0
-                                If (v) Write(v_unit,'(A,I0,A)',ADVANCE='YES') ', ',n_p,' E-points'
+                                If (v_basic) Write(v_unit,'(A,I0,A)',ADVANCE='YES') ', ',n_p,' E-points'
                                 n_p = n_p + n_p_2
                             Else  !SECOND TIME
                                 Do j = 1,n_p
@@ -626,9 +639,9 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
                         n_start = n_start + n_p
                     End If
                 Else If (MF.EQ.1 .AND. MT.EQ.451) Then
-                    If (first_time .AND. v) Write(v_unit,'(A)',ADVANCE='YES') ' - uncounted, resonances'  !FIRST TIME
+                    If (first_time .AND. v_basic) Write(v_unit,'(A)',ADVANCE='YES') ' - uncounted, resonances'  !FIRST TIME
                 Else
-                    If (first_time .AND. v) Write(v_unit,'(A)',ADVANCE='YES') ' - uncounted'  !FIRST TIME
+                    If (first_time .AND. v_basic) Write(v_unit,'(A)',ADVANCE='YES') ' - uncounted'  !FIRST TIME
                 End If
                 !advance to end of section
                 Call Find_MFMT_end(ENDF_unit)
@@ -638,7 +651,7 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
         If (first_time) Then  !FIRST TIME
             first_time = .FALSE.
         Else  !SECOND TIME
-            If (v) Then
+            If (v_basic) Then
                 Write(v_unit,*)
                 Do i = 1,CS%n_iso
                     Write(v_unit,'(A,I0,A,I0,A)') Trim(isotope_names(i))//' ENDF tape contains ',n_abs_modes(i), & 
@@ -658,7 +671,8 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
                         End If
                     End Do
                 End Do
-                Write(v_unit,'(I0,A)') n_energies,' total energies to map on unified list'
+                Write(v_unit,*)
+                Write(v_unit,'(I0,A)') n_energies,' total energies to map on unified list.'
             End If
             n_p = n_energies !stash n_energies before it gets overwritten
             E_uni_scratch = E_uni_scratch / 1000._dp  !convert to kev
@@ -673,7 +687,7 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
             Deallocate(E_uni_scratch)
             Allocate(CS%lnE_uni(1:n_energies))
             CS%lnE_uni = Log(CS%E_uni)
-            If (v) Then
+            If (v_full) Then
                 Write(v_unit,*)
                 Write(v_unit,'(A)') half_dash_line
                 Write(v_unit,'(A)') 'UNIFIED ENERGY LIST'
@@ -691,7 +705,7 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     !!  READ IN INTERACTION CROSS SECTIONS AND ANGULAR DISTRIBUTIONS
     !Now read each file (yes, again) into its place in the cross section structure, constructing the integer maps and keys as we go
-    If (v) Then
+    If (v_full) Then
         Write(v_unit,*)
         Write(v_unit,'(A)') half_dash_line
         Write(v_unit,'(A)') 'CROSS SECTION DATA STORED AND INDEXED'
@@ -737,7 +751,7 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
                                      & CS%abs_cs(i)%thresh(j) )
             End If
             Deallocate(E_scratch,sig_scratch,Interp_scratch)
-            If (v) Then  !write the stored values for this absorption mode
+            If (v_full) Then  !write the stored values for this absorption mode
                 Write(v_unit,'(A,I0,A,I0,A)') Trim(isotope_names(i))//' MF=',3,', MT=',abs_modes(j,i),' (absorption)'
                 Call Write_stored_sig(v_unit,CS%abs_cs(i)%sig(j),CS%n_E_uni,CS%E_uni)
             End If
@@ -769,13 +783,13 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
             End If
             !the next read statement on ENDF_unit will read the first line of MF=2, MT=151
             Call Read_res_sect(ENDF_unit,CS%res_cs(i))
-            If (v) Then  !write the stored values for this resonance representation
+            If (v_full) Then  !write the stored values for this resonance representation
                 Write(v_unit,'(A,I0,A,I0,A)') Trim(isotope_names(i))//' MF=',2,', MT=',151,' (resonance)'
                 Call Write_stored_res(v_unit,CS%res_cs(i))
             End If
         Else  !no resonance parameters, all interaction cross sections are tabulated in MF=3
             CS%has_res_cs(i) = .FALSE.
-            If (v) Then  !write the stored values for this resonance representation
+            If (v_full) Then  !write the stored values for this resonance representation
                 Write(v_unit,'(A)') Trim(isotope_names(i))//' has no ENDF resonance data.'
                 Write(v_unit,*)
             End If
@@ -802,7 +816,7 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
                                  & CS%lev_cs(i)%thresh(0) )
         End If
         Deallocate(E_scratch,sig_scratch,Interp_scratch)
-        If (v) Then  !write the stored values for elastic scatter interaction cross section
+        If (v_full) Then  !write the stored values for elastic scatter interaction cross section
             Write(v_unit,'(A,I0,A,I0,A)') Trim(isotope_names(i))//' MF=',3,', MT=',2,' (sig, elastic)'
             Call Write_stored_sig(v_unit,CS%lev_cs(i)%sig(0),CS%n_E_uni,CS%E_uni)
         End If
@@ -832,7 +846,7 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
                 End If
                 Deallocate(E_scratch,Ang_dist_scratch)
             End If
-            If (v) Then  !write the stored values for elastic scatter angular distribution
+            If (v_full) Then  !write the stored values for elastic scatter angular distribution
                 Write(v_unit,'(A,I0,A,I0,A)') Trim(isotope_names(i))//' MF=',4,', MT=',2,' (da, elastic)'
                 Call Write_stored_AD(v_unit,CS%lev_cs(i)%da(0),CS%n_E_uni,CS%E_uni)
             End If
@@ -879,7 +893,7 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
                                         & CS%lev_cs(i)%thresh(j) )
             End If
             Deallocate(E_scratch,sig_scratch,Interp_scratch)
-            If (v) Then  !write the stored values for this inelastic scatter interaction cross section
+            If (v_full) Then  !write the stored values for this inelastic scatter interaction cross section
                 Write(v_unit,'(A,I0,A,I0,A)') Trim(isotope_names(i))//' MF=',3,', MT=',50+j,' (sig, inelastic)'
                 Call Write_stored_sig(v_unit,CS%lev_cs(i)%sig(j),CS%n_E_uni,CS%E_uni)
             End If
@@ -920,7 +934,7 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
                     End If
                     Deallocate(E_scratch,Ang_dist_scratch)
                 End If
-                If (v) Then  !write the stored values for this inelastic scatter angular distribution
+                If (v_full) Then  !write the stored values for this inelastic scatter angular distribution
                     Write(v_unit,'(A,I0,A,I0,A)') Trim(isotope_names(i))//' MF=',MF,', MT=',MT,' (da, inelastic)'
                     Call Write_stored_AD(v_unit,CS%lev_cs(i)%da(j),CS%n_E_uni,CS%E_uni)
                 End If
@@ -943,7 +957,7 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
         !N2H For verbose output, write a summary of scattering modes for this isotope
     End Do
     CS%Mn = neutron_mass * Sum(CS%An) / CS%n_iso
-    If (v) Then
+    If (v_burn0) Then
         !write cross section traces for total, scatter, and absorption for each isotope
         Write(v_unit,*)
         Write(v_unit,'(A)') half_dash_line
@@ -994,6 +1008,8 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
             End Do
         End Do
         Close(t_unit)
+    End If
+    If (v_burn300) Then
         !write cross section traces for total, scatter, and absorption for each isotope broadened to 300K
         T_broad = 300._dp
         Write(v_unit,*)
@@ -1135,8 +1151,8 @@ Subroutine Write_stored_AD(v_unit,d,n_E_uni,E_uni)
         End If
         Write(v_unit,*)
         If (d%da(k)%is_Legendre) Then
-            Write(v_unit,'(A9,I5,A11)') '',d%da(k)%n_a,' Legendre C'
-            Write(v_unit,'(A9,A16)')    '',         '--------------'
+            Write(v_unit,'(A9,I5,A16)') '',d%da(k)%n_a,' Legendre Coeffs'
+            Write(v_unit,'(A9,A21)')    '',         '-------------------'
         Else !tabulated cosine pdf
             Write(v_unit,'(A9,I5,A11,2A16)') '',d%da(k)%n_a,' Cosine    ',' PDF          ',' ln(PDF)      '
             Write(v_unit,'(A9,3A16)') '',                '--------------','--------------','--------------'
