@@ -769,6 +769,7 @@ Subroutine Write_Scatter_Model(s,file_name)
     Write(unit,'(A,I15)') '  Histories implicitly leaked due to EXO source:  ',s%n_uncounted
     Write(unit,*)
     Write(unit,*)
+    Close(unit)
 End Subroutine Write_Scatter_Model
 
 End Module Neutron_Scatter
