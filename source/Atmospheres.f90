@@ -276,7 +276,7 @@ Function Setup_Atmosphere(setup_file_name,resources_dir,run_file_name,cs_file_na
         Allocate(atm%iso_ind(1:n_elements+1))
         Read(setup_unit,NML = csSetupList2)
         n_iso = Sum(n_isotopes)
-        Allocate(iso_fractions(1:n_elements))
+        Allocate(iso_fractions(1:n_iso))
         Allocate(isotope_names(1:n_iso))
         Allocate(diatomic(1:n_iso))
         Allocate(atm%iso_frac(1:n_iso))
