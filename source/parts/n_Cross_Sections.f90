@@ -20,6 +20,7 @@ Module n_Cross_Sections
     Private
     Public :: CS_Type
     Public :: sig_Composite
+    Public :: sig_Composite_list
     Public :: sig_Resonance
     Public :: Setup_Cross_Sections
     Public :: Write_Cross_Sections
@@ -222,7 +223,13 @@ Module n_Cross_Sections
 
 Contains
 
-Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,aniso_dist,E_min,E_max,verbosity) Result(CS)
+Function Setup_Cross_Sections( resources_directory, & 
+                             & cs_setup_file,       & 
+                             & cs_summary_file,     & 
+                             & elastic_only,        & 
+                             & aniso_dist,          & 
+                             & E_min,E_max,         & 
+                             & verbosity            ) Result(CS)
     Use Kinds, Only: dp
     Use Sorting, Only: Union_Sort
     Use FileIO_Utilities, Only: max_path_len
@@ -235,6 +242,7 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
     Type(CS_Type) :: CS
     Character(*), Intent(In) :: resources_directory
     Character(*), Intent(In) :: cs_setup_file
+    Character(*), Intent(In) :: cs_summary_file
     Logical, Intent(In) :: elastic_only
     Logical, Intent(In) :: aniso_dist
     Real(dp), Intent(In) :: E_min,E_max
@@ -265,7 +273,7 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
     Real(dp), Allocatable :: sig_scratch(:)
     Integer, Allocatable :: Interp_scratch(:,:)
     Type(da_List_type), Allocatable :: Ang_Dist_scratch(:)
-    Integer :: setup_unit,ENDF_unit,v_unit,t_unit,stat
+    Integer :: setup_unit,ENDF_unit,v_unit,stat
     Integer, Allocatable :: n_abs_modes(:),n_inel_lev(:)
     Integer, Allocatable :: abs_modes(:,:),inel_levs(:,:),inel_da_mf(:,:)
     Real(dp), Allocatable :: abs_thresh(:,:),inel_thresh(:,:)
@@ -334,9 +342,9 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
     CS%has_res_cs = .FALSE.
     Allocate(CS%res_cs(1:CS%n_iso))
     If (v_basic) Then  !create file for verbose output
-        Open(NEWUNIT = v_unit , FILE = 'n_cs_HASTE_summary.txt' , STATUS = 'REPLACE' , ACTION = 'WRITE' , IOSTAT = stat)
+        Open(NEWUNIT = v_unit , FILE = cs_summary_file , STATUS = 'REPLACE' , ACTION = 'WRITE' , IOSTAT = stat)
         If (stat .NE. 0) Call Output_Message( 'ERROR:  Cross_Sections: Setup_Cross_Sections:  File open error, ' & 
-                                            & //'n_cs_HASTE_summary.txt'//', IOSTAT=',stat,kill=.TRUE. )
+                                            & //cs_summary_file//', IOSTAT=',stat,kill=.TRUE. )
     End If
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     !!  CREATE A UNIFIED ENERGY LIST FOR THE CROSS SECTION DATA
@@ -938,11 +946,14 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
                     Write(v_unit,'(A,I0,A,I0,A)') Trim(isotope_names(i))//' MF=',MF,', MT=',MT,' (da, inelastic)'
                     Call Write_stored_AD(v_unit,CS%lev_cs(i)%da(j),CS%n_E_uni,CS%E_uni)
                 End If
-                If (LTT.EQ.1 .OR. LAW.EQ.3) Then
-                    If (MaxVal(CS%lev_cs(i)%da(j)%da(:)%n_a) .GT. CS%n_a_max) CS%n_a_max = MaxVal(CS%lev_cs(i)%da(j)%da(:)%n_a)
+                If (LTT.EQ.1 .OR. LAW.EQ.2) Then
+                    Do k = 1,CS%lev_cs(i)%da(j)%n_da
+                        If (CS%lev_cs(i)%da(j)%da(k)%n_a .GT. CS%n_a_max) CS%n_a_max = CS%lev_cs(i)%da(j)%da(k)%n_a
+                    End Do
                 Else If (LTT .EQ. 2) Then
-                    If (MaxVal(CS%lev_cs(i)%da(j)%da(:)%n_a) .GT. CS%n_a_tab_max) & 
-                        & CS%n_a_tab_max = MaxVal(CS%lev_cs(i)%da(j)%da(:)%n_a)
+                    Do k = 1,CS%lev_cs(i)%da(j)%n_da
+                        If (CS%lev_cs(i)%da(j)%da(k)%n_a .GT. CS%n_a_tab_max) CS%n_a_tab_max = CS%lev_cs(i)%da(j)%da(k)%n_a
+                    End Do
                 Else If (LTT .EQ. 3) Then
                     Do k = 1,CS%lev_cs(i)%da(j)%n_da
                         If (CS%lev_cs(i)%da(j)%da(k)%is_legendre) Then
@@ -977,9 +988,6 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
             Write(v_unit,'(3A16)',ADVANCE='NO') '--------------','--------------','--------------'
         End Do
         Write(v_unit,*)
-        Open(NEWUNIT = t_unit , FILE = 'n_cs_HASTE_summary_traces.txt' , STATUS = 'REPLACE' , ACTION = 'WRITE' , IOSTAT = stat)
-        If (stat .NE. 0) Call Output_Message( 'ERROR:  Cross_Sections: Setup_Cross_Sections:  File open error, ' & 
-                                            & //'n_cs_HASTE_summary_traces.txt'//', IOSTAT=',stat,kill=.TRUE. )
         Do i = 1,CS%n_E_uni-1
             Do j = 0,inter_pts+1
                 En = CS%E_uni(i) + Real(j,dp) * (CS%E_uni(i+1)-CS%E_uni(i)) / Real(inter_pts+1,dp)
@@ -994,20 +1002,16 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
                 sS = CS%sig_S(En)
                 sA = CS%sig_A(En)
                 Write(v_unit,'(4ES16.7E2)',ADVANCE='NO') En , sT , sS , sA
-                Write(t_unit,'(4ES16.7E2)',ADVANCE='NO') En , sT , sS , sA
                 Do k = 1,CS%n_iso
                     sT = CS%sig_T(k,En)
                     sS = CS%sig_S(k,En)
                     sA = CS%sig_A(k,En)
                     Write(v_unit,'(3ES16.7E2)',ADVANCE='NO') sT , sS , sA
-                    Write(t_unit,'(3ES16.7E2)',ADVANCE='NO') sT , sS , sA
                 End Do
                 Write(v_unit,*)
-                Write(t_unit,*)
                 If (j.EQ.inter_pts .AND. i.LT.CS%n_E_uni-1) Exit
             End Do
         End Do
-        Close(t_unit)
     End If
     If (v_burn300) Then
         !write cross section traces for total, scatter, and absorption for each isotope broadened to 300K
@@ -1030,9 +1034,6 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
             Write(v_unit,'(3A16)',ADVANCE='NO') '--------------','--------------','--------------'
         End Do
         Write(v_unit,*)
-        Open(NEWUNIT = t_unit , FILE = 'n_cs_HASTE_summary_traces_300K.txt' , STATUS = 'REPLACE' , ACTION = 'WRITE' , IOSTAT = stat)
-        If (stat .NE. 0) Call Output_Message( 'ERROR:  Cross_Sections: Setup_Cross_Sections:  File open error, ' & 
-                                            & //'n_cs_HASTE_summary_traces_300K.txt'//', IOSTAT=',stat,kill=.TRUE. )
         Do i = 1,CS%n_E_uni-1
             Do j = 0,inter_pts+1
                 En = CS%E_uni(i) + Real(j,dp) * (CS%E_uni(i+1)-CS%E_uni(i)) / Real(inter_pts+1,dp)
@@ -1047,21 +1048,17 @@ Function Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ani
                 sS = CS%sig_S(En,T_broad)
                 sA = CS%sig_A(En,T_broad)
                 Write(v_unit,'(4ES16.7E2)',ADVANCE='NO') En , sT , sS , sA
-                Write(t_unit,'(4ES16.7E2)',ADVANCE='NO') En , sT , sS , sA
                 Do k = 1,CS%n_iso
                     sT = CS%sig_T(k,En,T_broad)
                     sS = CS%sig_S(k,En,T_broad)
                     sA = CS%sig_A(k,En,T_broad)
                     Write(v_unit,'(3ES16.7E2)',ADVANCE='NO') sT , sS , sA
-                    Write(t_unit,'(3ES16.7E2)',ADVANCE='NO') sT , sS , sA
                 End Do
                 Write(v_unit,*)
-                Write(t_unit,*)
                 If (j.EQ.inter_pts .AND. i.LT.CS%n_E_uni-1) Exit
             End Do
         End Do
         Close(v_unit)
-        Close(t_unit)
     End If
 End Function Setup_Cross_Sections
 
@@ -2455,6 +2452,80 @@ Pure Function sig_Composite(E,n_E,E_list,lnE_list,E_index,n1,n2,t_list,sig_list)
     Integer, Intent(In) :: n1,n2
     Integer, Intent(In) :: t_list(n1:n2)
     Type(sig_Type), Intent(In) :: sig_list(n1:n2)
+
+    sig = Sum( sig_composite_list(E,n_E,E_list,lnE_list,E_index,n1,n2,t_list,sig_list) )
+    ! Integer :: i,j
+    ! Integer :: index1,index2
+    ! Real(dp) :: E1,E2
+    ! Real(dp) :: sig1,sig2,sig_n
+    ! Integer :: method
+    ! Integer, Parameter :: Hist_interpolation   = 1  !y is constant in x (constant, histogram)
+    ! Integer, Parameter :: LinLin_interpolation = 2  !y is linear in x (linear-linear)
+    ! Integer, Parameter :: LinLog_interpolation = 3  !y is linear in ln(x) (linear-log)
+    ! Integer, Parameter :: LogLin_interpolation = 4  !ln(y) is linear in x (log-linear)
+    ! Integer, Parameter :: LogLog_interpolation = 5  !ln(y) is linear in ln(x) (log-log)
+
+    ! sig = 0._dp
+    ! method = LinLin_interpolation
+    ! i = n1 !initialize loop counter: loop runs at least once, from n1 to n2
+    ! Do
+    !     If (E_index .LE. t_list(i)) Exit
+    !     index1 = sig_list(i)%E_map(E_index) - 1
+    !     index2 = sig_list(i)%E_map(E_index)
+    !     Do j = 1,sig_list(i)%n_interp_r
+    !         If (index2 .LE. sig_list(i)%interp(j,1)) Then
+    !             method = sig_list(i)%interp(j,2)
+    !             Exit
+    !         End If
+    !     End Do
+    !     Select Case (method)
+    !         Case(Hist_interpolation)
+    !             sig_n = sig_list(i)%sig( index1 )
+    !         Case(LinLin_interpolation)
+    !             E1 = E_list( sig_list(i)%E_key( index1 ) )
+    !             E2 = E_list( sig_list(i)%E_key( index2 ) )
+    !             sig1 = sig_list(i)%sig( index1 )
+    !             sig2 = sig_list(i)%sig( index2 )
+    !             sig_n = Linear_Interp(E,E1,E2,sig1,sig2)
+    !         Case(LinLog_interpolation)
+    !             E1 = lnE_list( sig_list(i)%E_key( index1 ) )
+    !             E2 = lnE_list( sig_list(i)%E_key( index2 ) )
+    !             sig1 = sig_list(i)%sig( index1 )
+    !             sig2 = sig_list(i)%sig( index2 )
+    !             sig_n = Linear_Interp(Log(E),E1,E2,sig1,sig2)
+    !         Case(LogLin_interpolation)
+    !             E1 = E_list( sig_list(i)%E_key( index1 ) )
+    !             E2 = E_list( sig_list(i)%E_key( index2 ) )
+    !             sig1 = sig_list(i)%lnsig( index1 )
+    !             sig2 = sig_list(i)%lnsig( index2 )
+    !             sig_n = Exp(Linear_Interp(E,E1,E2,sig1,sig2))
+    !         Case(LogLog_interpolation)
+    !             E1 = lnE_list( sig_list(i)%E_key( index1 ) )
+    !             E2 = lnE_list( sig_list(i)%E_key( index2 ) )
+    !             sig1 = sig_list(i)%lnsig( index1 )
+    !             sig2 = sig_list(i)%lnsig( index2 )
+    !             sig_n = Exp(Linear_Interp(Log(E),E1,E2,sig1,sig2))
+    !     End Select
+    !     If (sig_n .GT. 0._dp) sig = sig + sig_n
+    !     i = i + 1
+    !     If (i .GT. n2) Exit
+    ! End Do
+End Function sig_Composite
+
+Pure Function sig_Composite_list(E,n_E,E_list,lnE_list,E_index,n1,n2,t_list,sig_list) Result(sig)
+    Use Kinds, Only: dp
+    Use Interpolation, Only: Linear_Interp
+    Use FileIO_Utilities, Only: Output_Message
+    Implicit None
+    Real(dp), Intent(In) :: E
+    Integer, Intent(In) :: n_E
+    Real(dp), Intent(In) :: E_list(1:n_E)
+    Real(dp), Intent(In) :: lnE_list(1:n_E)
+    Integer, Intent(In) :: E_index
+    Integer, Intent(In) :: n1,n2
+    Integer, Intent(In) :: t_list(n1:n2)
+    Type(sig_Type), Intent(In) :: sig_list(n1:n2)
+    Real(dp) :: sig(n1:n2)
     Integer :: i,j
     Integer :: index1,index2
     Real(dp) :: E1,E2
@@ -2468,9 +2539,9 @@ Pure Function sig_Composite(E,n_E,E_list,lnE_list,E_index,n1,n2,t_list,sig_list)
 
     sig = 0._dp
     method = LinLin_interpolation
-    i = n1 !initialize loop counter: loop runs at least once, from n1 to n2
-    Do
+    Do i = n1,n2 !loop runs at least once, from n1 to n2
         If (E_index .LE. t_list(i)) Exit
+        sig_n = -1._dp
         index1 = sig_list(i)%E_map(E_index) - 1
         index2 = sig_list(i)%E_map(E_index)
         Do j = 1,sig_list(i)%n_interp_r
@@ -2507,11 +2578,9 @@ Pure Function sig_Composite(E,n_E,E_list,lnE_list,E_index,n1,n2,t_list,sig_list)
                 sig2 = sig_list(i)%lnsig( index2 )
                 sig_n = Exp(Linear_Interp(Log(E),E1,E2,sig1,sig2))
         End Select
-        If (sig_n .GT. 0._dp) sig = sig + sig_n
-        i = i + 1
-        If (i .GT. n2) Exit
+        sig(i) = Max(sig_n,0._dp)
     End Do
-End Function sig_Composite
+End Function sig_Composite_list
 
 Pure Subroutine Broad_sig_start(E,M,T,v,gamma,vRmin,vRmax)
     Use Kinds, Only: dp

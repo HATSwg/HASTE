@@ -17,14 +17,14 @@ Module Neutron_Scatter
     
     Use Kinds, Only: dp
     Use Kinds, Only: id
-    Use n_Cross_Sections, Only: CS_Type
     Implicit None
-    
+
     Private
     Public :: Neutron_Type
     Public :: Scatter_Data_Type
     Public :: Scatter_Model_Type
     Public :: Setup_Scatter_Model
+    Public :: Finish_Scatter_Model_Setup
     Public :: Write_Scatter_Model
     Public :: Air_Velocity
     Public :: Apparent_Energy
@@ -43,7 +43,7 @@ Module Neutron_Scatter
         Real(dp) :: weight  !weight (probability of neutron existence in this state), reduced for things like absorption supression
         Real(dp) :: t  ![s] simulation time since neutron emission
     End Type
-    
+
     Type Scatter_Data_Type
         Real(dp) :: sig_A  ![km^-1]  absorption and total macroscopic (seal-level) cross sections
         Real(dp) :: sig_T
@@ -72,13 +72,14 @@ Module Neutron_Scatter
         Real(dp) :: A_hat(1:3),B_hat(1:3),C_hat(1:3)  !cartesian basis in CM frame computed as a side effect of next-event procedure
                                                       !saving it reduces operations in following scatter simulation
     End Type
-    
+
     Type Scatter_Model_Type
         Integer :: n_scatters  !number of scatters to follow for history
         Logical :: direct_contribution
         Logical :: estimate_each_scatter
         Logical :: elastic_only
         Logical :: aniso_dist
+        Real(dp) :: E_min,E_max
         Logical :: suppress_absorption
         Logical :: suppress_leakage
         Logical :: all_mat_mech
@@ -91,7 +92,6 @@ Module Neutron_Scatter
         Integer(id) :: next_events(1:3)  !next-events at detector (1)Attempted, (2)Found, (3)Tallied
         Integer(id) :: n_no_tally(1:3)  !next-events at detector NOT tallied due to (1)Time & Energy, (2)Time, (3)Energy
         Integer(id) :: n_uncounted  !histories implicitly leaked due to exoatmospheric source geometries
-        Type(CS_Type) :: CS
         Type(Scatter_Data_Type) :: scat  !parameters defining the next scatter
         Logical :: Gravity
         Logical :: Neutron_Decay
@@ -110,10 +110,10 @@ Module Neutron_Scatter
         Procedure, Pass :: Set_Scatter_iso
         Procedure, Pass :: Set_Scatter_lev
     End Type
-    
+
 Contains
 
-Function Setup_Scatter_Model(setup_file_name,resources_directory,cs_setup_file,run_file_name,atm_model_i) Result(ScatMod)
+Function Setup_Scatter_Model(setup_file_name,run_file_name,atm_model_i) Result(ScatMod)
     Use Kinds, Only: id
     Use n_Cross_Sections, Only: Setup_Cross_Sections
     Use Global, Only: n_kill_weight
@@ -122,8 +122,6 @@ Function Setup_Scatter_Model(setup_file_name,resources_directory,cs_setup_file,r
     Implicit None
     Type(Scatter_Model_Type) :: ScatMod
     Character(*), Intent(In) :: setup_file_name
-    Character(*), Intent(In) :: resources_directory
-    Character(*), Intent(In) :: cs_setup_file
     Character(*), Intent(In) :: run_file_name
     Integer, Intent(In) :: atm_model_i
     Integer :: n_scatters
@@ -184,6 +182,8 @@ Function Setup_Scatter_Model(setup_file_name,resources_directory,cs_setup_file,r
     End If
     ScatMod%estimate_each_scatter = estimate_each_scatter
     ScatMod%elastic_only = elastic_only
+    ScatMod%E_min = E_min
+    ScatMod%E_max = E_max
     ScatMod%suppress_absorption = suppress_absorption
     ScatMod%suppress_leakage = suppress_leakage
     ScatMod%all_mat_mech = all_mat_mech
@@ -229,21 +229,6 @@ Function Setup_Scatter_Model(setup_file_name,resources_directory,cs_setup_file,r
     ScatMod%next_events = 0_id
     ScatMod%n_no_tally = 0_id
     ScatMod%n_uncounted = 0_id
-    If (atm_model_i .NE. -1) Then !load cross sections
-        ScatMod%CS = Setup_Cross_Sections(resources_directory,cs_setup_file,elastic_only,ScatMod%aniso_dist,E_min,E_max,verbosity=2)
-        ScatMod%cs_loaded = .TRUE.
-        !initialize scatter CS arrays for sampled scatters, except the lev_cs array (used for sampled scatters)
-        Allocate(ScatMod%scat%a(0:ScatMod%CS%n_a_max))
-        ScatMod%scat%a = 0._dp
-        Allocate(ScatMod%scat%a_tab1(1:2,1:ScatMod%CS%n_a_tab_max))
-        ScatMod%scat%a_tab1 = 0._dp
-        Allocate(ScatMod%scat%a_tab2(1:2,1:ScatMod%CS%n_a_tab_max))
-        ScatMod%scat%a_tab2 = 0._dp
-        Allocate(ScatMod%scat%iso_cs(1:ScatMod%CS%n_iso))
-        ScatMod%scat%iso_cs = 0._dp
-    Else !cross sections are not needed if atmosphere is disabled
-        ScatMod%cs_loaded = .FALSE.
-    End If
     If (Worker_Index() .EQ. 1) Then
         Open(NEWUNIT = setup_unit , FILE = run_file_name , STATUS = 'OLD' , ACTION = 'WRITE' , POSITION = 'APPEND' , IOSTAT = stat)
         If (stat .NE. 0) Call Output_Message( 'ERROR:  Neutron_Scatter: Setup_Scatter_Model:  File open error, '//run_file_name// & 
@@ -254,13 +239,38 @@ Function Setup_Scatter_Model(setup_file_name,resources_directory,cs_setup_file,r
     End If
 End Function Setup_Scatter_Model
 
-Subroutine Sample_Scatter(ScatMod,n,atm,RNG)
+Subroutine Finish_Scatter_Model_Setup(ScatMod,CS_loaded,n_a_max,n_a_tab_max,n_iso)
+    Implicit None
+    Type(Scatter_Model_Type), Intent(InOut) :: ScatMod
+    Logical, Intent(In) :: CS_loaded
+    Integer, Intent(In), Optional :: n_a_max
+    Integer, Intent(In), Optional :: n_a_tab_max
+    Integer, Intent(In), Optional :: n_iso
+    
+    If (CS_loaded) Then !cross sections were loaded
+        ScatMod%cs_loaded = .TRUE.
+        !initialize scatter CS arrays for sampled scatters, except the lev_cs array (used for sampled scatters)
+        Allocate(ScatMod%scat%a(0:n_a_max))
+        ScatMod%scat%a = 0._dp
+        Allocate(ScatMod%scat%a_tab1(1:2,1:n_a_tab_max))
+        ScatMod%scat%a_tab1 = 0._dp
+        Allocate(ScatMod%scat%a_tab2(1:2,1:n_a_tab_max))
+        ScatMod%scat%a_tab2 = 0._dp
+        Allocate(ScatMod%scat%iso_cs(1:n_iso))
+        ScatMod%scat%iso_cs = 0._dp
+    Else !cross sections are not needed if atmosphere is disabled
+        ScatMod%cs_loaded = .FALSE.
+    End If
+End Subroutine Finish_Scatter_Model_Setup
+
+Subroutine Sample_Scatter(ScatMod,n,CS,atm,RNG)
     Use Kinds, Only: dp
     Use Global, Only: mfp_per_barn_per_km_at_seaLevel
     Use Global, Only: Z_hat,X_hat
     Use Atmospheres, Only: Atmosphere_Type
     Use Random_Numbers, Only: RNG_Type
-    Use n_Cross_Sections, Only: sig_Composite
+    Use n_Cross_Sections, Only: CS_type
+    Use n_Cross_Sections, Only: sig_Composite_list
     Use n_Cross_Sections, Only: sig_Resonance
     Use Utilities, Only: Bisection_Search
     Use Utilities, Only: Vector_Length
@@ -273,6 +283,7 @@ Subroutine Sample_Scatter(ScatMod,n,atm,RNG)
     Implicit None
     Class(Scatter_Model_Type), Intent(InOut) :: ScatMod
     Type(Neutron_Type), Intent(In):: n
+    Type(CS_Type), Intent(In) :: CS
     Type(Atmosphere_Type), Intent(In) :: atm
     Type(RNG_Type), Intent(InOut) :: RNG
     Integer :: E_index,i,index1,index2
@@ -298,25 +309,25 @@ Subroutine Sample_Scatter(ScatMod,n,atm,RNG)
     End If
     If (ScatMod%Doppler_Broaden) Then
         T = atm%T(n%Z)
-        Call ScatMod%CS%sig_T_A(E_apparent,T,ScatMod%scat%sig_T,ScatMod%scat%sig_A)
-        Do i = 1,ScatMod%CS%n_iso
-            ScatMod%scat%iso_cs(i) = ScatMod%CS%sig_S(i,E_apparent,T)
+        Call CS%sig_T_A(E_apparent,T,ScatMod%scat%sig_T,ScatMod%scat%sig_A)
+        Do i = 1,CS%n_iso
+            ScatMod%scat%iso_cs(i) = CS%sig_S(i,E_apparent,T)
         End Do
     Else
-        Call ScatMod%CS%sig_T_A(E_apparent,ScatMod%scat%sig_T,ScatMod%scat%sig_A,iE_get=E_index)
-        Do i = 1,ScatMod%CS%n_iso
-            ScatMod%scat%iso_cs(i) = ScatMod%CS%sig_S(i,E_apparent,iE_put=E_index)
+        Call CS%sig_T_A(E_apparent,ScatMod%scat%sig_T,ScatMod%scat%sig_A,iE_get=E_index)
+        Do i = 1,CS%n_iso
+            ScatMod%scat%iso_cs(i) = CS%sig_S(i,E_apparent,iE_put=E_index)
         End Do
     End If
     ScatMod%scat%sig_A = ScatMod%scat%sig_A * mfp_per_barn_per_km_at_seaLevel  !convert to macroscopic cross section at sea-level
     ScatMod%scat%sig_T = ScatMod%scat%sig_T * mfp_per_barn_per_km_at_seaLevel  !convert to macroscopic cross section at sea-level
     !Choose a target isotope based on relative SCATTER cross sections
-    ScatMod%scat%iso_cs = ScatMod%scat%iso_cs * ScatMod%CS%iso_Fractions
+    ScatMod%scat%iso_cs = ScatMod%scat%iso_cs * CS%iso_Fractions
     r = RNG%Get_Random() * Sum(ScatMod%scat%iso_cs)
-    Do i = 1,ScatMod%CS%n_iso
+    Do i = 1,CS%n_iso
         If (r .LT. Sum(ScatMod%scat%iso_cs(1:i))) Then
             ScatMod%scat%target_index = i
-            ScatMod%scat%An = ScatMod%CS%An(i)
+            ScatMod%scat%An = CS%An(i)
             Exit
         End If
     End Do
@@ -328,7 +339,7 @@ Subroutine Sample_Scatter(ScatMod,n,atm,RNG)
                 target_el = atm%iso_map(ScatMod%scat%target_index)
                 Do i = atm%iso_ind(target_el),atm%iso_ind(target_el+1)-1
                     If (r .LT. Sum(atm%iso_frac(atm%iso_ind(target_el):i))) Then
-                        An_prime = ScatMod%CS%An(i)
+                        An_prime = CS%An(i)
                         Mn = ScatMod%scat%An + An_prime
                         Exit
                     End If
@@ -349,7 +360,7 @@ Subroutine Sample_Scatter(ScatMod,n,atm,RNG)
     v0cm = v0 - ScatMod%scat%u
     E_cm = Neutron_Energy(v0cm)
     !find E_cm in the unified energy grid
-    E_index = Bisection_Search(E_cm,ScatMod%CS%E_uni,ScatMod%CS%n_E_uni)
+    E_index = Bisection_Search(E_cm,CS%E_uni,CS%n_E_uni)
     !compute a few more predetermined quantities that are known before the scatter
     ScatMod%scat%u_speed = Vector_Length(ScatMod%scat%u)
     ScatMod%scat%Omega_hat0_cm = Unit_Vector(v0cm)
@@ -366,33 +377,29 @@ Subroutine Sample_Scatter(ScatMod,n,atm,RNG)
         ScatMod%scat%level = 0
         ScatMod%scat%Q = 0._dp
     Else  !sample scatter level (including elastic as level 0)
-        If (E_index .LT. ScatMod%CS%lev_cs(iso)%thresh(1)) Then !not enough energy for lowest inelastic level, scatter is elastic
+        If (E_index .LT. CS%lev_cs(iso)%thresh(1)) Then !not enough energy for lowest inelastic level, scatter is elastic
             ScatMod%scat%level = 0
             ScatMod%scat%Q = 0._dp
         Else !sample for scatter level
-            Allocate(level_cs(0:ScatMod%CS%lev_cs(iso)%n_lev))
-            level_cs = 0._dp
-            Do i = 0,ScatMod%CS%lev_cs(iso)%n_lev
-                If (E_index .LE. ScatMod%CS%lev_cs(iso)%thresh(i)) Exit  !insufficent energy for this or any higher inelastic level
-                level_cs(i) = sig_Composite( E_cm, & 
-                                           & ScatMod%CS%n_E_uni, & 
-                                           & ScatMod%CS%E_uni, & 
-                                           & ScatMod%CS%lnE_uni, & 
-                                           & E_index, & 
-                                           & 1, & 
-                                           & 1, & 
-                                           & ScatMod%CS%lev_cs(iso)%thresh(i), & 
-                                           & ScatMod%CS%lev_cs(iso)%sig(i) )
-            End Do
-            If (ScatMod%CS%has_res_cs(iso)) Then  !resonance contribution needs to be added to level 0 (elastic)
-                Call sig_Resonance(ScatMod%CS%res_cs(iso),E_cm,resT,resS)
+            Allocate(level_cs(0:CS%lev_cs(iso)%n_lev))
+            level_cs = sig_Composite_list( E_cm,                  & 
+                                         & CS%n_E_uni,            & 
+                                         & CS%E_uni,              & 
+                                         & CS%lnE_uni,            & 
+                                         & E_index,               & 
+                                         & 0,                     & 
+                                         & CS%lev_cs(iso)%n_lev,  & 
+                                         & CS%lev_cs(iso)%thresh, & 
+                                         & CS%lev_cs(iso)%sig     )
+            If (CS%has_res_cs(iso)) Then  !resonance contribution needs to be added to level 0 (elastic)
+                Call sig_Resonance(CS%res_cs(iso),E_cm,resT,resS)
                 level_cs(0) = level_cs(0) + resS
             End If
             r = RNG%Get_Random() * Sum(level_cs)
-            Do i = 0,ScatMod%CS%lev_cs(iso)%n_Lev
+            Do i = 0,CS%lev_cs(iso)%n_Lev
                 If (r .LT. Sum(level_cs(0:i))) Then
                     ScatMod%scat%level = i
-                    ScatMod%scat%Q = ScatMod%CS%lev_cs(ScatMod%scat%target_index)%Q(i)
+                    ScatMod%scat%Q = CS%lev_cs(ScatMod%scat%target_index)%Q(i)
                     Exit
                 End If
             End Do
@@ -400,34 +407,34 @@ Subroutine Sample_Scatter(ScatMod,n,atm,RNG)
     End If
     lev = ScatMod%scat%level
     If (ScatMod%aniso_dist) Then
-        If (ScatMod%CS%lev_cs(iso)%da(lev)%is_iso) Then
+        If (CS%lev_cs(iso)%da(lev)%is_iso) Then
             ScatMod%scat%da_is_iso = .TRUE.
             ScatMod%scat%da_is_legendre = .FALSE.
             ScatMod%scat%da_is_tab = .FALSE.
         Else
-            index1 = ScatMod%CS%lev_cs(iso)%da(lev)%E_map(E_index) - 1
-            index2 = ScatMod%CS%lev_cs(iso)%da(lev)%E_map(E_index)
-            E1 = ScatMod%CS%E_uni( ScatMod%CS%lev_cs(iso)%da(lev)%E_key( index1 ) )
-            E2 = ScatMod%CS%E_uni( ScatMod%CS%lev_cs(iso)%da(lev)%E_key( index2 ) )
+            index1 = CS%lev_cs(iso)%da(lev)%E_map(E_index) - 1
+            index2 = CS%lev_cs(iso)%da(lev)%E_map(E_index)
+            E1 = CS%E_uni( CS%lev_cs(iso)%da(lev)%E_key( index1 ) )
+            E2 = CS%E_uni( CS%lev_cs(iso)%da(lev)%E_key( index2 ) )
             ScatMod%scat%da_is_iso = .FALSE.
-            If (ScatMod%CS%lev_cs(iso)%da(lev)%da(index1)%is_Legendre) Then  !angular dist is expressed in legendre coeffs
+            If (CS%lev_cs(iso)%da(lev)%da(index1)%is_Legendre) Then  !angular dist is expressed in legendre coeffs
                 ScatMod%scat%da_is_legendre = .TRUE.
                 ScatMod%scat%da_is_tab = .FALSE.
-                ScatMod%scat%n_a = MaxVal(ScatMod%CS%lev_cs(iso)%da(lev)%da(index1:index2)%n_a)
+                ScatMod%scat%n_a = MaxVal(CS%lev_cs(iso)%da(lev)%da(index1:index2)%n_a)
                 Allocate(a1(0:ScatMod%scat%n_a))
                 Allocate(a2(0:ScatMod%scat%n_a))
                 a1 = 0._dp
                 a2 = 0._dp
-                a1(0:ScatMod%CS%lev_cs(iso)%da(lev)%da(index1)%n_a) = ScatMod%CS%lev_cs(iso)%da(lev)%da(index1)%a
-                a2(0:ScatMod%CS%lev_cs(iso)%da(lev)%da(index2)%n_a) = ScatMod%CS%lev_cs(iso)%da(lev)%da(index2)%a
+                a1(0:CS%lev_cs(iso)%da(lev)%da(index1)%n_a) = CS%lev_cs(iso)%da(lev)%da(index1)%a
+                a2(0:CS%lev_cs(iso)%da(lev)%da(index2)%n_a) = CS%lev_cs(iso)%da(lev)%da(index2)%a
                 ScatMod%scat%a(0:ScatMod%scat%n_a) = Linear_Interp(E_cm,E1,E2,a1,a2)
             Else !angular dist is expressed in tabulated cosine pdf values
                 ScatMod%scat%da_is_legendre = .FALSE.
                 ScatMod%scat%da_is_tab = .TRUE.
-                ScatMod%scat%n_a1 = ScatMod%CS%lev_cs(iso)%da(lev)%da(index1)%n_a
-                ScatMod%scat%n_a2 = ScatMod%CS%lev_cs(iso)%da(lev)%da(index2)%n_a
-                ScatMod%scat%a_tab1(:,1:ScatMod%scat%n_a1) = ScatMod%CS%lev_cs(iso)%da(lev)%da(index1)%ua
-                ScatMod%scat%a_tab2(:,1:ScatMod%scat%n_a2) = ScatMod%CS%lev_cs(iso)%da(lev)%da(index2)%ua
+                ScatMod%scat%n_a1 = CS%lev_cs(iso)%da(lev)%da(index1)%n_a
+                ScatMod%scat%n_a2 = CS%lev_cs(iso)%da(lev)%da(index2)%n_a
+                ScatMod%scat%a_tab1(:,1:ScatMod%scat%n_a1) = CS%lev_cs(iso)%da(lev)%da(index1)%ua
+                ScatMod%scat%a_tab2(:,1:ScatMod%scat%n_a2) = CS%lev_cs(iso)%da(lev)%da(index2)%ua
                 ScatMod%scat%a_tab_Econv = (E_cm - E1) / (E2 - E1)
             End If
         End If
@@ -437,10 +444,12 @@ Subroutine Sample_Scatter(ScatMod,n,atm,RNG)
                                        & ScatMod%scat%An / (ScatMod%scat%An+1._dp) )
 End Subroutine Sample_Scatter
 
-Subroutine Set_Scatter_prep(ScatMod,scat)
+Subroutine Set_Scatter_prep(ScatMod,CS,scat)
     Use Kinds, Only: dp
+    Use n_Cross_Sections, Only: CS_Type
     Implicit None
     Class(Scatter_Model_Type), Intent(In) :: ScatMod
+    Type(CS_Type), Intent(In) :: CS
     Type(Scatter_Data_Type), Intent(Out) :: scat
     
     !Get total and absorption apparent cross sections from sampled scatter
@@ -449,23 +458,24 @@ Subroutine Set_Scatter_prep(ScatMod,scat)
     !Get air velocity from sampled scatter
     scat%vAir = ScatMod%scat%vAir
     !Set up arrays for angular distributions
-    Allocate(scat%a(0:ScatMod%CS%n_a_max))
+    Allocate(scat%a(0:CS%n_a_max))
     scat%a = 0._dp
-    Allocate(scat%a_tab1(1:2,1:ScatMod%CS%n_a_tab_max))
-    Allocate(scat%a_tab2(1:2,1:ScatMod%CS%n_a_tab_max))
+    Allocate(scat%a_tab1(1:2,1:CS%n_a_tab_max))
+    Allocate(scat%a_tab2(1:2,1:CS%n_a_tab_max))
     scat%a_tab1 = 0._dp
     scat%a_tab2 = 0._dp
     !Get precomputed isotope cross sections from sampled scatter
-    Allocate(scat%iso_cs(1:ScatMod%CS%n_iso))
+    Allocate(scat%iso_cs(1:CS%n_iso))
     scat%iso_cs = ScatMod%scat%iso_cs / Sum(ScatMod%scat%iso_cs)
 End Subroutine Set_Scatter_prep
 
-Subroutine Set_Scatter_iso(ScatMod,n,atm,RNG,scat,iso,n_lev,E_cm,i_E_cm)
+Subroutine Set_Scatter_iso(ScatMod,n,CS,atm,RNG,scat,iso,n_lev,E_cm,i_E_cm)
     Use Kinds, Only: dp
     Use Global, Only: X_hat,Z_hat
     Use Atmospheres, Only: Atmosphere_Type
     Use Random_Numbers, Only: RNG_Type
-    Use n_Cross_Sections, Only: sig_Composite
+    Use n_Cross_Sections, Only: CS_type
+    Use n_Cross_Sections, Only: sig_Composite_list
     Use n_Cross_Sections, Only: sig_Resonance
     Use Utilities, Only: Bisection_Search
     Use Utilities, Only: Vector_Length
@@ -477,6 +487,7 @@ Subroutine Set_Scatter_iso(ScatMod,n,atm,RNG,scat,iso,n_lev,E_cm,i_E_cm)
     Implicit None
     Class(Scatter_Model_Type), Intent(In) :: ScatMod
     Type(Neutron_Type), Intent(In):: n
+    Type(CS_Type), Intent(In):: CS
     Type(Atmosphere_Type), Intent(In) :: atm
     Type(RNG_Type), Intent(InOut) :: RNG
     Type(Scatter_Data_Type), Intent(InOut) :: scat
@@ -493,7 +504,7 @@ Subroutine Set_Scatter_iso(ScatMod,n,atm,RNG,scat,iso,n_lev,E_cm,i_E_cm)
     
     !Set target isotope
     scat%target_index = iso
-    scat%An = ScatMod%CS%An(iso)
+    scat%An = CS%An(iso)
     !Add thermal motion
     If (ScatMod%Thermal_Motion) Then
         If (ScatMod%scat%target_index .EQ. iso) Then !the sampled scatter already has values we can use here
@@ -505,7 +516,7 @@ Subroutine Set_Scatter_iso(ScatMod,n,atm,RNG,scat,iso,n_lev,E_cm,i_E_cm)
                     target_el = atm%iso_map(iso)
                     Do i = atm%iso_ind(target_el),atm%iso_ind(target_el+1)-1
                         If (r .LT. Sum(atm%iso_frac(atm%iso_ind(target_el):i))) Then
-                            An_prime = ScatMod%CS%An(i)
+                            An_prime = CS%An(i)
                             Mn = scat%An + An_prime
                             Exit
                         End If
@@ -527,7 +538,7 @@ Subroutine Set_Scatter_iso(ScatMod,n,atm,RNG,scat,iso,n_lev,E_cm,i_E_cm)
     v0cm = v0 - scat%u
     E_cm = Neutron_Energy(v0cm)
     !find E_cm in the unified energy grid
-    i_E_cm = Bisection_Search(E_cm,ScatMod%CS%E_uni,ScatMod%CS%n_E_uni)
+    i_E_cm = Bisection_Search(E_cm,CS%E_uni,CS%n_E_uni)
     !compute a few more predetermined quantities that are known before the scatter
     scat%u_speed = Vector_Length(scat%u)
     scat%Omega_hat0_cm = Unit_Vector(v0cm)
@@ -539,25 +550,21 @@ Subroutine Set_Scatter_iso(ScatMod,n,atm,RNG,scat,iso,n_lev,E_cm,i_E_cm)
     End If
     scat%C_hat = Cross_Product(scat%A_hat,scat%B_hat)
     !Get level cross sections
-    Allocate(scat%lev_cs(0:ScatMod%CS%lev_cs(iso)%n_lev))
-    scat%lev_cs = 0._dp
-    Do i = 0,ScatMod%CS%lev_cs(iso)%n_lev
-        If (i_E_cm .LE. ScatMod%CS%lev_cs(iso)%thresh(i)) Exit  !insufficent energy for this or any higher inelastic level
-        n_lev = i
-        scat%lev_cs(i) = sig_Composite( E_cm, & 
-                                        & ScatMod%CS%n_E_uni, & 
-                                        & ScatMod%CS%E_uni, & 
-                                        & ScatMod%CS%lnE_uni, & 
-                                        & i_E_cm, & 
-                                        & 1, & 
-                                        & 1, & 
-                                        & ScatMod%CS%lev_cs(iso)%thresh(i), & 
-                                        & ScatMod%CS%lev_cs(iso)%sig(i) )
-    End Do
-    If (ScatMod%CS%has_res_cs(iso)) Then  !resonance contribution needs to be added to level 0 (elastic)
-        Call sig_Resonance(ScatMod%CS%res_cs(iso),E_cm,resT,resS)
+    Allocate(scat%lev_cs(0:CS%lev_cs(iso)%n_lev))
+    scat%lev_cs = sig_Composite_list( E_cm,                  & 
+                                    & CS%n_E_uni,            & 
+                                    & CS%E_uni,              & 
+                                    & CS%lnE_uni,            & 
+                                    & i_E_cm,                & 
+                                    & 0,                     & 
+                                    & CS%lev_cs(iso)%n_lev,  & 
+                                    & CS%lev_cs(iso)%thresh, & 
+                                    & CS%lev_cs(iso)%sig     )
+    If (CS%has_res_cs(iso)) Then  !resonance contribution needs to be added to level 0 (elastic)
+        Call sig_Resonance(CS%res_cs(iso),E_cm,resT,resS)
         scat%lev_cs(0) = scat%lev_cs(0) + resS
     End If
+    n_lev = Count(scat%lev_cs .GT. 0._dp) - 1
     If (n_lev .GT. 0) Then
         scat%lev_cs = scat%lev_cs / Sum(scat%lev_cs)
     Else
@@ -565,14 +572,16 @@ Subroutine Set_Scatter_iso(ScatMod,n,atm,RNG,scat,iso,n_lev,E_cm,i_E_cm)
     End If
 End Subroutine Set_Scatter_iso
 
-Subroutine Set_Scatter_lev(ScatMod,scat,lev,E_cm,i_E_cm)
+Subroutine Set_Scatter_lev(ScatMod,scat,CS,lev,E_cm,i_E_cm)
     Use Kinds, Only: dp
+    Use n_Cross_Sections, Only: CS_type
     Use Interpolation, Only: Linear_Interp
     Use Neutron_Utilities, Only: Neutron_Speed
     Use Neutron_Utilities, Only: Neutron_Energy
     Implicit None
     Class(Scatter_Model_Type), Intent(In) :: ScatMod
     Type(Scatter_Data_Type), Intent(InOut) :: scat
+    Type(CS_type), Intent(In) :: CS
     Integer, Intent(In) :: lev
     Real(dp), Intent(In) :: E_cm
     Integer, Intent(In) :: i_E_cm
@@ -582,41 +591,39 @@ Subroutine Set_Scatter_lev(ScatMod,scat,lev,E_cm,i_E_cm)
     
     !Set scatter level
     scat%level = lev
-    scat%Q = ScatMod%CS%lev_cs(scat%target_index)%Q(lev)
+    scat%Q = CS%lev_cs(scat%target_index)%Q(lev)
     If (ScatMod%aniso_dist) Then  !get angular distribution coeffs
-        ASSOCIATE ( ScatMod_lev_da => ScatMod%CS%lev_cs(scat%target_index)%da(lev) )
-        If (ScatMod_lev_da%is_iso) Then
+        If (CS%lev_cs(scat%target_index)%da(lev)%is_iso) Then
             scat%da_is_iso = .TRUE.
             scat%da_is_legendre = .FALSE.
             scat%da_is_tab = .FALSE.
         Else
-            index1 = ScatMod_lev_da%E_map(i_E_cm) - 1
-            index2 = ScatMod_lev_da%E_map(i_E_cm)
-            E1 = ScatMod%CS%E_uni( ScatMod_lev_da%E_key( index1 ) )
-            E2 = ScatMod%CS%E_uni( ScatMod_lev_da%E_key( index2 ) )
+            index1 = CS%lev_cs(scat%target_index)%da(lev)%E_map(i_E_cm) - 1
+            index2 = CS%lev_cs(scat%target_index)%da(lev)%E_map(i_E_cm)
+            E1 = CS%E_uni( CS%lev_cs(scat%target_index)%da(lev)%E_key( index1 ) )
+            E2 = CS%E_uni( CS%lev_cs(scat%target_index)%da(lev)%E_key( index2 ) )
             scat%da_is_iso = .FALSE.
-            If (ScatMod_lev_da%da(index1)%is_Legendre) Then  !angular dist is expressed in legendre coeffs
+            If (CS%lev_cs(scat%target_index)%da(lev)%da(index1)%is_Legendre) Then  !angular dist is expressed in legendre coeffs
                 scat%da_is_legendre = .TRUE.
                 scat%da_is_tab = .FALSE.
-                scat%n_a = MaxVal(ScatMod_lev_da%da(index1:index2)%n_a)
+                scat%n_a = MaxVal(CS%lev_cs(scat%target_index)%da(lev)%da(index1:index2)%n_a)
                 Allocate(a1(0:scat%n_a))
                 Allocate(a2(0:scat%n_a))
                 a1 = 0._dp
                 a2 = 0._dp
-                a1(0:ScatMod_lev_da%da(index1)%n_a) = ScatMod_lev_da%da(index1)%a
-                a2(0:ScatMod_lev_da%da(index2)%n_a) = ScatMod_lev_da%da(index2)%a
+                a1(0:CS%lev_cs(scat%target_index)%da(lev)%da(index1)%n_a) = CS%lev_cs(scat%target_index)%da(lev)%da(index1)%a
+                a2(0:CS%lev_cs(scat%target_index)%da(lev)%da(index2)%n_a) = CS%lev_cs(scat%target_index)%da(lev)%da(index2)%a
                 scat%a(0:scat%n_a) = Linear_Interp(E_cm,E1,E2,a1,a2)
             Else !angular dist is expressed in tabulated cosine pdf values
                 scat%da_is_legendre = .FALSE.
                 scat%da_is_tab = .TRUE.
-                scat%n_a1 = ScatMod_lev_da%da(index1)%n_a
-                scat%n_a2 = ScatMod_lev_da%da(index2)%n_a
-                scat%a_tab1(:,1:scat%n_a1) = ScatMod_lev_da%da(index1)%ua
-                scat%a_tab2(:,1:scat%n_a2) = ScatMod_lev_da%da(index2)%ua
+                scat%n_a1 = CS%lev_cs(scat%target_index)%da(lev)%da(index1)%n_a
+                scat%n_a2 = CS%lev_cs(scat%target_index)%da(lev)%da(index2)%n_a
+                scat%a_tab1(:,1:scat%n_a1) = CS%lev_cs(scat%target_index)%da(lev)%da(index1)%ua
+                scat%a_tab2(:,1:scat%n_a2) = CS%lev_cs(scat%target_index)%da(lev)%da(index2)%ua
                 scat%a_tab_Econv = (E_cm - E1) / (E2 - E1)
             End If
         End If
-        End ASSOCIATE
     End If
     !speed of neutron after scatter is independent of direction in CM frame
     scat%s1cm = Neutron_Speed( ( E_cm + scat%An * Neutron_Energy(scat%vA - scat%u) - scat%Q) * scat%An / (scat%An + 1._dp) )
@@ -762,18 +769,6 @@ Subroutine Write_Scatter_Model(s,file_name)
     Write(unit,'(A,I15)') '  Histories implicitly leaked due to EXO source:  ',s%n_uncounted
     Write(unit,*)
     Write(unit,*)
-    If (s%cs_loaded) Then
-        Close(unit)
-        Call Write_Cross_Sections(s%CS,s%doppler_broaden,file_name)
-    Else
-        Write(unit,'(A)') half_dash_line
-        Write(unit,'(A)') 'CROSS SECTIONS INFORMATION'
-        Write(unit,'(A)') half_dash_line
-        Write(unit,'(A)') '  Cross sections not loaded for atmosphere=NONE.'
-        Write(unit,*)
-        Write(unit,*)
-        Close(unit)
-    End If    
 End Subroutine Write_Scatter_Model
 
 End Module Neutron_Scatter
