@@ -14,13 +14,13 @@
 !   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 !-------------------------------------------------------------------------------
 Module Find_Trajectory
-    
+
     Implicit None
     Private
     Public :: Next_Event_Trajectory
     Public :: Simple_Trajectory
     Public :: Prev_Event_Trajectory
-    
+
 Contains
 
 Subroutine Next_Event_Trajectory(sat, Gravity, r1, t1, s1cm, u_vec, outbound_search, Found, r2, tof, v1cm, v2sat, vS2)
@@ -38,7 +38,7 @@ Subroutine Next_Event_Trajectory(sat, Gravity, r1, t1, s1cm, u_vec, outbound_sea
     Real(dp), Intent(In):: r1(1:3)       ! [km]   Location of scatter
     Real(dp), Intent(In) :: t1           ! [s]    time of scatter
     Real(dp), Intent(In) :: s1cm         ! [km/s] speed of neutron in cm system after scatter
-    Real(dp), Intent(In) :: u_vec(1:3)   ! [km/s] velocity of center of mass of atom and neutron    
+    Real(dp), Intent(In) :: u_vec(1:3)   ! [km/s] velocity of center of mass of atom and neutron
     Logical, Intent(In) :: outbound_search ! Whether to search for solutions on outbout or inbound trajectories
     Logical, Intent(Out) :: Found        ! Whether solution is found (neutron can reach satellite)
     Real(dp), Intent(Out) :: r2(1:3)     ! [km]   neutron/target position at time of arrival
@@ -295,7 +295,7 @@ Contains
         Use Astro_Utilities, Only: Lambert_minV
         Implicit None
         Real(dp), Intent(Out) :: max_TOF
-        
+
         If (SME(Vector_Length(r1),s1cm-u_speed) .GE. 0._dp) Then
         !neutron must be on a parabolic or hyperbolic trajectory, max TOF occurs where transfer SME is zero
             !find transfer orbit TOF where SME=0 (parabolic transfer)
@@ -370,7 +370,7 @@ Contains
     !NOTE:  The preceeding contained subroutines INTENTIONALLY CAUSE SIDE-EFFECTS in the calling routine
     !NOTE:  Removing these subroutines from the contained construct will change the functionality of the containing routine
 End Subroutine Next_Event_Trajectory
-    
+
 Subroutine Simple_Trajectory(r1, r2, s1cm, vScm, v1cm, dt, Found)
     Use Kinds, Only: dp
     Use Utilities, Only: Unit_Vector

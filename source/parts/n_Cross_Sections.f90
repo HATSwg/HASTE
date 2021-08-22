@@ -916,7 +916,7 @@ Function Setup_Cross_Sections( resources_directory, &
                         Call Output_Message( 'ERROR:  Cross_Sections: Setup_Cross_Sections:  Section not found, MF='// & 
                                            & '4,6'//', MT='//Trim(Adjustl(to_str(MT))) , kill=.TRUE. )
                     End If
-                End If    
+                End If
                 LTT = -HUGE(LTT)
                 LAW = -HUGE(LAW)
                 Select Case (MF)
@@ -1747,7 +1747,7 @@ Elemental Subroutine copy_da(da_get,da_put)
     Implicit None
     Type(da_list_Type), Intent(In) :: da_get
     Type(da_list_Type), Intent(Out) :: da_put
-    
+
     da_put%n_a = da_get%n_a
     da_put%is_Legendre = da_get%is_legendre
     da_put%is_Tab = da_get%is_Tab

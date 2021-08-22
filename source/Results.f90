@@ -14,7 +14,7 @@
 !   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 !-------------------------------------------------------------------------------
 Module Results
-    
+
     Implicit None
     Private
 
@@ -24,7 +24,7 @@ Module Results
         Public :: Image_Result_to_Disk
         Public :: Image_Results_from_Disk
 #   endif
-    
+
 Contains
 
 # if CAF
@@ -50,7 +50,7 @@ Subroutine Image_Result_to_Disk(run_time,wait_time,n_hit,n_run,t,d,n_kills,next_
     Character(3) :: i_char
     Character(max_path_len) :: dir
     Character(:), Allocatable :: file_name,file_dir
-    
+
     Call Working_Directory(GETdir = dir,s = slash)
     Allocate(Character(max_path_len) :: file_dir)
     file_dir = Trim(dir)//'temp'//slash
@@ -156,7 +156,7 @@ Subroutine Image_Results_from_Disk(nt,nE,nm,no,t_runs,t_waits,n_hist_run,n_hist_
     Character(3) :: i_char
     Character(max_path_len) :: dir
     Character(:), Allocatable :: file_name,file_dir
-    
+
     Call Working_Directory(GETdir = dir,s = slash)
     Allocate(Character(max_path_len) :: file_dir)
     file_dir = Trim(dir)//'temp'//slash
@@ -368,7 +368,7 @@ Subroutine Write_Run_Summary(n_img,t_runs,t_waits,n_h_hit,n_h_run,RNG,paths_file
     Type(Contrib_array), Intent(In) :: Dir_tallies
     Character(*), Intent(In) :: file_name
     Integer :: unit,stat
-    
+
     Open(NEWUNIT = unit , FILE = file_name , STATUS = 'REPLACE' , ACTION = 'WRITE' , POSITION = 'APPEND' , IOSTAT = stat)
     If (stat .NE. 0) Call Output_Message( 'ERROR:  Results: Write_Run_Summary:  File open error, '//file_name// & 
                                         & ', IOSTAT=',stat,kill=.TRUE.)
@@ -403,7 +403,7 @@ Subroutine Write_Tally_Grids( TE_list,Dir_list,d,n_h, &
     Character(*), Intent(In), Optional :: o_file_name
     Integer :: unit,stat
     Real(dp) :: N_hist
-    
+
     N_hist = Real(n_h,dp)
     If (Sum(TE_list%contribs(1:TE_list%index)%f) .GT. 0._dp) Then
         !write the total fluence file
@@ -502,7 +502,7 @@ Subroutine Write_Tally_Grids( TE_list,Dir_list,d,n_h, &
                 Close(unit)
             End If
         End If
-    End If    
+    End If
 End Subroutine Write_Tally_Grids
 
 Subroutine Write_tot_Tallies(unit,N_hist,index,contribs,tot_sq)
@@ -517,7 +517,7 @@ Subroutine Write_tot_Tallies(unit,N_hist,index,contribs,tot_sq)
     Type(Contrib_Quadruplet), Intent(In) :: contribs(1:index)
     Real(dp), Intent(In) :: tot_sq
     Real(dp) :: f,err
-    
+
     f = Sum(contribs(:)%f) / N_hist
     err = Std_Err(N_hist,Sum(contribs(:)%f),tot_sq)
     Write(unit,'(5ES27.16E3)') f, err, err/f, f-std_devs_for_95CI*err, f+std_devs_for_95CI*err
@@ -539,7 +539,7 @@ Subroutine Write_2D_Tallies(unit,N_hist,index,contribs,grid1,grid2)
     Real(dp) :: min1,max1,mid1
     Real(dp) :: min2,max2,mid2
     Real(dp) :: f,err
-    
+
     !write each bin's details, contribution, standard error, and confidence interval
     Do i = 1,index
         i1 = contribs(i)%i1
@@ -589,7 +589,7 @@ Subroutine Write_1D_Tallies(unit,N_hist,index,contribs,grid1,grid2,dim,n,sq_list
     Real(dp) :: min2,max2,mid2
     Real(dp) :: f,err
     Real(dp), Allocatable :: tmp_grid(:,:)
-    
+
     Allocate(tmp_grid(1:grid1%n_bins,1:grid2%n_bins))
     tmp_grid = 0._dp
     Do i = 1,index
@@ -642,7 +642,7 @@ Subroutine Write_Results_summary(TE_list,Dir_List,d,n_h,file_name)
     Character(*), Intent(In) :: file_name
     Integer :: unit,stat
     Real(dp) :: N_hist
-    Integer :: n_img    
+    Integer :: n_img
 
     N_hist = Real(n_h,dp)
     n_img = n_Workers()

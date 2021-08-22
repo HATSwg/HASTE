@@ -84,11 +84,11 @@ Subroutine Setup_HASTE(prompt_for_exit,screen_progress,paths_files,n_neutron_his
     Logical :: interim_outputs
     Character(4) :: interim_unit
     Integer :: interim_period
-    
+
     NameList /ProgramSetupList/   prompt_for_exit,screen_progress, &
                                 & output_folder,file_suffix,force_overwrite, &
                                 & interim_outputs,interim_unit,interim_period
-    
+
     Call paths_files%Initialize()
     Allocate(Character(max_path_len) :: output_folder)
     Allocate(Character(max_path_len) :: file_suffix)
@@ -192,7 +192,7 @@ Subroutine Create_Output_File_names( dir,suff, &
     Character(:), Allocatable, Intent(InOut) :: S_name
     Character(:), Allocatable, Intent(InOut) :: CS_name
     Character(:), Allocatable, Intent(InOut), Optional :: run_name
-    
+
     !Construct file names
     !Construct log file name
     log_name = dir//'HASTE-Log'//suff//'.txt'
@@ -312,7 +312,7 @@ Subroutine Check_folders_exist(paths_files)
     Use FileIO_Utilities, Only: Output_Message
     Implicit None
     Type(paths_files_type), Intent(In) :: paths_files
-    
+
     !Check if resources directories exist
     If (.NOT. Check_Directory(paths_files%resources_directory)) Then
         Call Output_Message( 'ERROR:  Setups: Setup_HASTE:  Resources directory not found: '// & 
@@ -331,9 +331,9 @@ Subroutine Setup_Estimator(setup_file_name,run_file_name,n_neutron_histories,abs
     Integer(id), Intent(Out) :: n_neutron_histories
     Logical, Intent(Out) :: absolute_n_histories
     Integer :: setup_unit,stat
-    
+
     NameList /EstimatorSetupList/ n_neutron_histories,absolute_n_histories
-    
+
     !open setup file and read namelist
     Open(NEWUNIT = setup_unit , FILE = setup_file_name , STATUS = 'OLD' , ACTION = 'READ' , IOSTAT = stat)
     If (stat .NE. 0) Call Output_Message( 'ERROR:  Setups: Setup_Estimator:  File open error, '//setup_file_name// & 
@@ -448,7 +448,7 @@ Subroutine Setup_Info_from_disk(n_histories,abs_n_histories,prompt_for_exit,scre
     Character(max_path_len) :: dir
     Character(:), Allocatable :: file_name,file_dir
     Character(max_path_len) :: C_tmp
-    
+
     Call Working_Directory(GETdir=dir,s=slash)
     Allocate(Character(max_path_len) :: file_dir)
     file_dir = Trim(dir)//'temp'//slash
@@ -542,7 +542,7 @@ Subroutine Cleanup_temp_files()
     Use FileIO_Utilities, Only: Delete_Directory
     Implicit None
     Character(max_path_len) :: dir
-    
+
     Call Working_Directory(GETdir=dir,s=slash)
     !delete the temp directory
     Call Delete_Directory(Trim(dir)//'temp')
@@ -621,7 +621,7 @@ Subroutine Write_Setup_Information(n_img,t_runs,t_waits,n_h_hit,n_h_run,RNG,path
     Character(80) :: hostname
     Integer :: unit,stat
     Integer :: i
-    
+
     Open(NEWUNIT = unit , FILE = file_name , STATUS = 'UNKNOWN' , ACTION = 'WRITE' , POSITION = 'APPEND' , IOSTAT = stat)
     If (stat .NE. 0) Call Output_Message( 'ERROR:  Setups: Write_Setup_Information:  File open error, '//file_name// & 
                                         & ', IOSTAT=',stat,kill=.TRUE. )

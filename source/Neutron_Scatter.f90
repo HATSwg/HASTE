@@ -14,7 +14,7 @@
 !   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 !-------------------------------------------------------------------------------
 Module Neutron_Scatter
-    
+
     Use Kinds, Only: dp
     Use Kinds, Only: id
     Implicit None
@@ -137,14 +137,14 @@ Function Setup_Scatter_Model(setup_file_name,run_file_name,atm_model_i) Result(S
     Real(dp) :: roulette_weight
     Integer :: roulette_ratio
     Real(dp) :: E_min,E_max
-    
+
     NameList /NeutronScatterList/ n_scatters,scatter_model,elastic_only,suppress_absorption, &
                                   & suppress_leakage,all_mat_mech,dist_to_next_event, &
                                   & roulette,roulette_weight,roulette_ratio, &
                                   & direct_contribution,estimate_each_scatter,E_min,E_max, &
                                   & Gravity,neutron_decay,doppler_broaden,thermal_motion, &
                                   & Diatomic_Atm,Rotating_Earth,Wind,inbound_trajectories
-    
+
     Open(NEWUNIT = setup_unit , FILE = setup_file_name , STATUS = 'OLD' , ACTION = 'READ' , IOSTAT = stat)
     If (stat .NE. 0) Call Output_Message( 'ERROR:  Neutron_Scatter: Setup_Scatter_Model:  File open error, '//setup_file_name// & 
                                         & ', IOSTAT=',stat,kill=.TRUE.)
@@ -246,7 +246,7 @@ Subroutine Finish_Scatter_Model_Setup(ScatMod,CS_loaded,n_a_max,n_a_tab_max,n_is
     Integer, Intent(In), Optional :: n_a_max
     Integer, Intent(In), Optional :: n_a_tab_max
     Integer, Intent(In), Optional :: n_iso
-    
+
     If (CS_loaded) Then !cross sections were loaded
         ScatMod%cs_loaded = .TRUE.
         !initialize scatter CS arrays for sampled scatters, except the lev_cs array (used for sampled scatters)
@@ -298,7 +298,7 @@ Subroutine Sample_Scatter(ScatMod,n,CS,atm,RNG)
     Real(dp) :: T
     Real(dp) :: v0(1:3),v0cm(1:3)
     Real(dp) :: resT,resS
-    
+
     !Get atmosphere total/absorption and isotope scatter cross sections at the point of scatter
     If (ScatMod%Rotating_Earth .OR. ScatMod%Wind) Then
         ScatMod%scat%vAir = Air_Velocity(ScatMod%Rotating_Earth,ScatMod%Wind,n,atm)
@@ -451,7 +451,7 @@ Subroutine Set_Scatter_prep(ScatMod,CS,scat)
     Class(Scatter_Model_Type), Intent(In) :: ScatMod
     Type(CS_Type), Intent(In) :: CS
     Type(Scatter_Data_Type), Intent(Out) :: scat
-    
+
     !Get total and absorption apparent cross sections from sampled scatter
     scat%sig_A = ScatMod%scat%sig_A
     scat%sig_T = ScatMod%scat%sig_T
@@ -501,7 +501,7 @@ Subroutine Set_Scatter_iso(ScatMod,n,CS,atm,RNG,scat,iso,n_lev,E_cm,i_E_cm)
     Real(dp) :: An_prime,Mn
     Real(dp) :: v0(1:3),v0cm(1:3)
     Real(dp) :: resT,resS
-    
+
     !Set target isotope
     scat%target_index = iso
     scat%An = CS%An(iso)
@@ -588,7 +588,7 @@ Subroutine Set_Scatter_lev(ScatMod,scat,CS,lev,E_cm,i_E_cm)
     Integer :: index1,index2
     Real(dp) :: E1,E2
     Real(dp), Allocatable :: a1(:),a2(:)
-    
+
     !Set scatter level
     scat%level = lev
     scat%Q = CS%lev_cs(scat%target_index)%Q(lev)
@@ -643,7 +643,7 @@ Function Air_Velocity(Rotating_Earth,Wind,n,atm) Result(vA)
     Type(Atmosphere_Type), Intent(In) :: atm
     Real(dp) :: vA_AF(1:3)
     Real(dp) :: E_hat(1:3),N_hat(1:3),U_hat(1:3)
-    
+
     vA_AF = 0._dp
     !Add rotation of the atmosphere
     If (Rotating_Earth) vA_AF = vA_AF + Atm_Rotation_Velocity_AF(n%big_r,n%r(3)/n%big_r)
@@ -665,7 +665,7 @@ Function Apparent_Energy(E,Omega_hat,vA) Result(E_app)
     Implicit None
     Real(dp) :: E_app
     Real(dp), Intent(In) :: E,Omega_hat(1:3),vA(1:3)
-    
+
     E_app = Neutron_Energy( Neutron_Speed(E) * Omega_hat - vA )
 End Function Apparent_Energy
 
@@ -678,7 +678,7 @@ Function Scattered_Direction(mu,omega,A_hat,B_hat,C_hat) Result(Omega_hat)
     Real(dp), Intent(In) :: mu  ! Deflection angle cosine
     Real(dp), Intent(In) :: omega  ! Orientation angle around Omega_hat0
     Real(dp), Intent(In) :: A_hat(1:3),B_hat(1:3),C_hat(1:3)
-    
+
     Omega_hat = mu * A_hat + Sqrt(1._dp - mu**2) * (Cos(omega) * B_hat + Sin(omega) * C_hat)
 End Function Scattered_Direction
 
@@ -690,7 +690,7 @@ Subroutine Scattered_Angles(Omega_hat0,Omega_hat1,mu,omega,B_hat,C_hat)
     Real(dp), Intent(Out) :: mu  ! Deflection angle cosine
     Real(dp), Intent(Out) :: omega  ! Orientation angle around Omega_hat0
     Real(dp), Intent(In) :: B_hat(1:3),C_hat(1:3) 
-    
+
     mu = Dot_Product(Omega_hat0,Omega_hat1)
     omega = Atan2( Dot_Product(Omega_hat1,B_hat) , Dot_Product(Omega_hat1,C_hat) )
 End Subroutine Scattered_Angles
@@ -703,7 +703,7 @@ Subroutine Write_Scatter_Model(s,file_name)
     Type(Scatter_Model_Type), Intent(In) :: s
     Character(*), Intent(In) :: file_name
     Integer :: unit,stat
-    
+
     Open(NEWUNIT = unit , FILE = file_name , STATUS = 'UNKNOWN' , ACTION = 'WRITE' , POSITION = 'APPEND' , IOSTAT = stat)
     If (stat .NE. 0) Call Output_Message( 'ERROR:  Neutron_Scatter: Write_Scatter_Model:  File open error, '//file_name// & 
                                         & ', IOSTAT=',stat,kill=.TRUE.)

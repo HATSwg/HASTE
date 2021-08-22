@@ -14,24 +14,24 @@
 !   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 !-------------------------------------------------------------------------------
 Module Sources
-    
+
     Use Kinds, Only: dp
     Implicit None
     Private
     Public :: Source_Type
     Public :: Setup_Source
     Public :: Write_Source
-    
+
     Type :: Tab_1d_Type  !stores a 1-d tabulated distribution
         Integer :: n
         Real(dp), Allocatable :: b(:,:)  !has dimensions 1:2 and 1:n, list of bin boundaries
         Real(dp), Allocatable :: p(:)  !has dimension 1:n, list of cumulative bin intensities (normalized to sum to 1)
     End Type
-    
+
     Type, Extends(Tab_1d_Type) :: Tab_2d_Type  !stores a 2-d tabulated distribution
         Type(Tab_1d_Type), Allocatable :: d2(:)  !has dimension 1:n, list of lists for second dimension
     End Type
-    
+
     Type :: Source_Type
         Integer :: geom_index
         Real(dp) :: rad  ![km] Radius of spherical or albedo source
@@ -133,7 +133,7 @@ Function Setup_Source(setup_file_name,resources_dir,run_file_name,source_file_na
     Integer :: source_data_limit
     Integer :: setup_unit,stat
     Real(dp) :: E_hat(1:3),N_hat(1:3),U_hat(1:3)
-    
+
     NameList /NeutronSourceList/ source_geometry,r_source, & 
                                  & position_geometry,x_source,y_source,z_source, &
                                  & declination_source,hour_angle_source, &
@@ -143,7 +143,7 @@ Function Setup_Source(setup_file_name,resources_dir,run_file_name,source_file_na
                                  & source_A_dist,A_param, &
                                  & source_t_dist,t_start,t_stop, & 
                                  & collect_source_data,source_data_limit
-    
+
     Open(NEWUNIT = setup_unit , FILE = setup_file_name , STATUS = 'OLD' , ACTION = 'READ' , IOSTAT = stat)
     If (stat .NE. 0) Call Output_Message( 'ERROR:  Neutron_Source: Initialize_Neutron_Source:  File open error, ' & 
                                         & //setup_file_name//', IOSTAT=',stat,kill=.TRUE. )
@@ -444,7 +444,7 @@ Subroutine Sample_Source(s,RNG,n)
     Real(dp) :: v(1:3)
     Real(dp), Parameter :: one_third = 1._dp / 3._dp
     Real(dp), Parameter :: two_thirds = 2._dp / 3._dp
-    
+
     n%weight = 1._dp
     !Sample emission time
     If (s%point_time) Then
@@ -578,7 +578,7 @@ Function Watt235func(E) Result(w)
     Implicit None
     Real(dp) :: w
     Real(dp), Intent(In) :: E
-    
+
     w = Exp(-0.001036_dp * E) * Sinh(0.047853944456021595545_dp * Sqrt(E))
 End Function Watt235func
 
@@ -675,7 +675,7 @@ Subroutine Write_Source(s,file_name)
     Type(Source_Type), Intent(In) :: s
     Character(*), Intent(In) :: file_name
     Integer :: unit,stat
-    
+
     Open(NEWUNIT = unit , FILE = file_name , STATUS = 'UNKNOWN' , ACTION = 'WRITE' , POSITION = 'APPEND' , IOSTAT = stat)
     If (stat .NE. 0) Call Output_Message( 'ERROR:  Sources: Write_Source:  File open error, '//file_name// & 
                                         & ', IOSTAT=',stat,kill=.TRUE.)

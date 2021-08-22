@@ -18,7 +18,7 @@ Module MC_Neutron
     Implicit None
     Private
     Public :: Do_Neutron
-    
+
 Contains
 
 Subroutine Do_Neutron(s,d,CS,atm,ScatMod,RNG,contributed)
@@ -41,7 +41,7 @@ Subroutine Do_Neutron(s,d,CS,atm,ScatMod,RNG,contributed)
     Type(Neutron_Type) :: n
     Logical :: leaked,absorbed  !indicates kill criteria met for leakage or absorption
     Integer :: scatter  !loop counter
-        
+
     !Start a new neutron
     n = Start_Neutron(s,CS,atm,RNG,ScatMod,d)
     If (ScatMod%direct_contribution) Call First_Event_Neutron(n,CS,ScatMod,s,d,atm)
@@ -247,7 +247,7 @@ Subroutine First_Event_Neutron(n,CS,ScatMod,s,d,atm)
     Real(dp) :: r_ca
     Real(dp) :: h,xi,p,e,s1
     Integer :: i
-        
+
     If (ScatMod%Gravity) Then !check if energy is adequate to reach detector
         If (SME(n%big_r,n%s0ef+s%speed) .LT. 0._dp) Then
             !neutron's max velocity is less than escape velocity, check if satellite altitude is achievable
@@ -508,7 +508,7 @@ Subroutine Next_Event_Neutron(n,CS,ScatMod,d,atm,RNG)
     Integer :: n_lev
     Real(dp) :: E_cm
     Integer :: i_E_cm
-    
+
     If (ScatMod%all_mat_mech) Then
         Call ScatMod%Set_Scatter_prep(CS,scat)
         !set scatter parameters for each material/mechanism and compute next event
@@ -585,7 +585,7 @@ Subroutine Attempt_Next_Event(n,CS,ScatMod,d,atm,scat,w_scat)
     Real(dp) :: divCM  !divergence factor
     Logical :: no_LOS  !flag indicates path to detector intersects Earth
     Integer :: i
-        
+
     If (ScatMod%Gravity) Then !check if energy is adequate to reach detector
         If (SME(n%big_r,scat%s1cm+scat%u_speed) .LT. 0._dp) Then
         !neutron's max velocity is less than escape velocity, check if satellite altitude is achievable
@@ -717,7 +717,7 @@ Subroutine Scatter_Neutron(n,ScatMod,RNG,absorbed)
     Real(dp) :: omega0cm  !isotropic azimuth for scatter in CM frame
     Real(dp) :: Omega_hat1_cm(1:3)  ![1 km]  velocity unit vectors in CM frame before and after collision
     Real(dp) :: v1(1:3)  ![km/s] velocity vector of neutron after collision 
-        
+
     !Check for absorption and absorption supression
     If (ScatMod%suppress_absorption) Then !adjust weight for ignored absorption possibility
         n%weight = n%weight * (1._dp - ScatMod%scat%sig_A / ScatMod%scat%sig_T)
@@ -765,7 +765,7 @@ Function Kill_Neutron(t,E,t_max,E_min,n_kills) Result(kill)
     Real(dp), Intent(In) :: E_min
     Real(dp), Intent(In) :: t_max
     Integer(8), Intent(InOut) :: n_kills(1:2)  !# of kills due to (1)Time, (2)Energy
-    
+
     kill = .FALSE.
     If (t .GT. t_max) Then
         kill = .TRUE.
@@ -789,7 +789,7 @@ Function Roulette_Neutron(weight,roulette_w,roulette_rate,roulette_mult,n_kills,
     Real(dp), Intent(In) :: roulette_mult
     Integer(id), Intent(InOut) :: n_kills  !# of kills due to roulette
     Type(RNG_Type), Intent(InOut) :: RNG
-    
+
     kill = .FALSE.
     If (weight .GT. roulette_w) Return  !no roulette procedure
     If (RNG%Get_Random() .GT. roulette_rate) Then  !kill

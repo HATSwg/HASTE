@@ -163,7 +163,7 @@ Subroutine CheckEPLprecsShallow()
         !Compute exact EPL
         zeta0 = Real(i,dp) * 0.01_dp
         Smax = dZ * (2._dp * r0 + dZ) / ( zeta0 * r0 + Sqrt( (zeta0 * r0)**2 + dZ * (2._dp * r0 + dZ) ) )
-        L0 = Romberg_Quad(EPL_Integrand_dS,0._dp,Smax,atol=abstol,rtol=reltol,p=L0p)
+        L0 = Romberg_Quad(EPL_Integrand_dS,0._dp,Smax,atol=abstol,rtol=reltol,allow_GL_fallback=.FALSE.,p=L0p)
         Write(*,'(F4.2,A,ES23.15,A,F0.5,A)') zeta0,'   exact: ',L0,' (~',L0p,' digits of precision)'
         Write(unit,'(F4.2,A,ES23.15,A,F0.5,A)') zeta0,'   exact: ',L0,' (~',L0p,' digits of precision)'
         !Compute approximate EPL, stopping when desired precision is achieved
@@ -209,7 +209,7 @@ Subroutine CheckEPLprecsSteep
     Do i = 1,n_zeta
         zeta0 = Real(i,dp) * 0.1_dp
         Smax = dZ * (2._dp * r0 + dZ) / ( zeta0 * r0 + Sqrt( (zeta0 * r0)**2 + dZ * (2._dp * r0 + dZ) ) )
-        L0 = Romberg_Quad(EPL_Integrand_dS,0._dp,Smax,atol=abstol,rtol=reltol,p=L0p)
+        L0 = Romberg_Quad(EPL_Integrand_dS,0._dp,Smax,atol=abstol,rtol=reltol,allow_GL_fallback=.FALSE.,p=L0p)
         Write(*,'(F4.2,A,ES23.15,A,F0.5,A)') zeta0,'   exact: ',L0,' (~',L0p,' digits of precision)'
         Write(unit,'(F4.2,A,ES23.15,A,F0.5,A)') zeta0,'   exact: ',L0,' (~',L0p,' digits of precision)'
         !Compute approximate EPL, stopping when desired precision is achieved

@@ -26,7 +26,7 @@ Module Detectors
     Public :: Setup_Detector
     Public :: Write_Detector
     Public :: Close_Slice_files
-    
+
     Type :: Grid_Info_Type
         Real(dp) :: min
         Real(dp) :: max
@@ -45,7 +45,7 @@ Module Detectors
         Procedure, Pass :: Bin_number  !returns the index of the bin in which a value falls
         Procedure, Pass :: Bin_center  !returns the geometric 'center' of a bin based on bin spacing type
     End Type
-    
+
     Type :: Detector_Type
         Type(Satellite_Position_Type) :: sat  !defines motion of the detector
         Logical :: exoatmospheric  !T indicates detector is outside atmosphere, F indicates detector IN the atmosphere
@@ -67,7 +67,7 @@ Module Detectors
         Procedure, Pass :: Tally_Scatter  !records contribution in TE contribs arrays
         Procedure, Pass :: Combine_Duplicate_Tallies  !scrubs list of contributions: combines duplicate bins, condenses the list
     End Type
-    
+
 Contains
 
 Function Setup_Detector(setup_file_name,resources_dir,run_file_name,slice_file_name,R_top_atm) Result(d)
@@ -120,7 +120,7 @@ Function Setup_Detector(setup_file_name,resources_dir,run_file_name,slice_file_n
                                    & t_max,t_min,t_grid_spacing,t_res,t_bins_per_decade, &
                                    & n_mu_bins,n_omega_bins,collect_shape_data,shape_data_n_slices, &
                                    & shape_data_limit
-    
+
     Open(NEWUNIT = setup_unit , FILE = setup_file_name , STATUS = 'OLD' , ACTION = 'READ' , IOSTAT = stat)
     If (stat .NE. 0) Call Output_Message( 'ERROR:  Detectors: Setup_Detector:  File open error, '//setup_file_name// & 
                                         & ', IOSTAT=',stat,kill=.TRUE.)
@@ -306,7 +306,7 @@ Subroutine Tally_Scatter(d,E,Omega_Hat,t,weight)
     Real(dp) :: Arr_dir_DNF(1:3)
     Integer :: mu_bin,omega_bin
     Integer :: i
-    
+
     If (weight .EQ. 0._dp) Return !don't bother tallying zeroes
     t_bin = d%TE_grid(1)%Bin_number(t)
     E_bin = d%TE_grid(2)%Bin_number(E)
@@ -387,7 +387,7 @@ Function Bin_Number(g,x) Result(b)
     Integer :: b
     Class(Grid_Info_Type), Intent(In) :: g
     Real(dp), Intent(In) :: x
-    
+
     If (g%log_spacing) Then
         b = Ceiling(Real(g%n_bins,dp) * (log10(x) - Real(g%log_min,dp)) / Real(g%n_decades,dp))
     Else  !linear spacing
@@ -402,7 +402,7 @@ Subroutine Resize_Contrib_Lists(list1,list2,size)
     Type(Contrib_triplet), Intent(InOut), Allocatable :: list2(:)
     Integer, Intent(InOut) :: size
     Type(Contrib_triplet), Allocatable :: swap(:)
-    
+
     !Prepare swap array
     Allocate(swap(1:size))
     !Resize first (time-energy) list
@@ -429,7 +429,7 @@ End Subroutine Resize_Contrib_Lists
 Subroutine Combine_Duplicate_Tallies(d)
     Implicit None
     Class(Detector_Type), Intent(InOut) :: d
-    
+
     Call Sort_Combine_Triplets(d%Contrib_size,d%TE_contribs_this_history,d%TE_contrib_index)
     Call Sort_Combine_Triplets(d%Contrib_size,d%Dir_contribs_this_history,d%Dir_contrib_index)
 End Subroutine Combine_Duplicate_Tallies
@@ -440,7 +440,7 @@ Subroutine Sort_Combine_Triplets(size,list,index)
     Type(Contrib_Triplet), Intent(InOut) :: list(1:size)
     Integer, Intent(InOut) :: index
     Integer :: i,j,k,n_1,n_2
-    
+
     !Sort the list of contributions for this history on 1st index
     Call Contribution_Cocktail_Sort_i1(index,list)
     !Within each 1st index bin: sort in 2nd index and then consolidate duplicate contributions
@@ -498,7 +498,7 @@ Subroutine Contribution_Cocktail_Sort_i1(n,c)
     Type(Contrib_triplet)  :: swap
     Logical :: no_swaps
     Integer :: i,j
-        
+    
     Do  j = 1,n  !Cocktail sort (bidirectional bubble sort)
         !Bubble sort down through the list
         no_swaps = .TRUE.
@@ -532,7 +532,7 @@ Subroutine Contribution_Cocktail_Sort_i2(n,c)
     Type(Contrib_triplet)  :: swap
     Logical :: no_swaps
     Integer :: i,j
-        
+    
     Do  j = 1,n  !Cocktail sort (bidirectional bubble sort)
         !Bubble sort down through the list
         no_swaps = .TRUE.
@@ -573,7 +573,7 @@ Subroutine Write_Detector(d,file_name)
     Integer :: i
     Logical :: write_full_position_trace
     Real(dp) :: t,r(1:3),v(1:3)
-    
+
     Open(NEWUNIT = unit , FILE = file_name , STATUS = 'UNKNOWN' , ACTION = 'WRITE' , POSITION = 'APPEND' , IOSTAT = stat)
     If (stat .NE. 0) Call Output_Message( 'ERROR:  Detectors: Write_Detector:  File open error, '//file_name// & 
                                         & ', IOSTAT=',stat,kill=.TRUE.)
@@ -709,7 +709,7 @@ Function Bin_Center(g,b) Result(x)
     Real(dp) :: x
     Class(Grid_info_Type), Intent(In) :: g
     Integer, Intent(In) :: b
-    
+
     If (g%log_spacing) Then
         x = 10._dp**( 0.5_dp * (Log10(g%bounds(b-1)) + Log10(g%bounds(b))) )
     Else
@@ -723,7 +723,7 @@ Subroutine Close_Slice_Files(n,flags1,units1,flags2,units2)
     Logical, Intent(In) :: flags1(1:n),flags2(1:n)
     Integer, Intent(In) :: units1(1:n),units2(1:n)
     Integer :: i
-    
+
     Do i = 1,n
         If (flags1(i)) Close(units1(i))
         If (flags2(i)) Close(units2(i))
