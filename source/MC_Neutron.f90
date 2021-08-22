@@ -453,12 +453,12 @@ Subroutine Move_Neutron(n,CS,ScatMod,atm,RNG,leaked)
     End If
     leaked = .FALSE.
     P_not_leak = 1._dp - Exp(-sigma_T * xEff_to_leak)
+    xi = RNG%Get_Random()
     If (ScatMod%suppress_leakage) Then
         n%weight = n%weight * P_not_leak
-        tau = -Log(1._dp - RNG%Get_Random() * P_not_leak)
+        tau = -Log( 1._dp - xi * P_not_leak )
     Else
-        xi = RNG%Get_Random()
-        If (xi .GE. P_not_leak) Then
+        If (xi .GT. P_not_leak) Then
             leaked = .TRUE.
             Return
         Else
@@ -467,6 +467,12 @@ Subroutine Move_Neutron(n,CS,ScatMod,atm,RNG,leaked)
     End If
     !compute EPL to next scatter
     xEff = tau / sigma_T
+    If (xEff .GT. xEff_to_leak) Then  !sampled pathlength exceeds pathlength to leak
+    !This accounts for "numerical" leakage due to numerical precision near the edge of the atmosphere
+        n%weight = 0._dp
+        leaked = .TRUE.
+        Return
+    End If
     !UNDONE Fast analog approximation to avoid EPL to distance rootsolve
     !If (ScatMod%fast_analog) Then  !apply non-analog approximation to get S from L (avoids root-solving)
         !d = L_to_S(atm,xEff,n%big_r,n%z,n%zeta,nb,bb,Lb,db,sigma_T,RNG,n%weight)
