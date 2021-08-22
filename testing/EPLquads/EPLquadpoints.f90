@@ -39,7 +39,8 @@ Do b = 0,6
 End Do
 
 !Layer 8 (b = 7) goes from 86 to 91 km
-!there is a discontinuity in the USSA76 model at 86km, so the EPL integrand functions have a special case for this to use the right endpoint
+!  There is a discontinuity in the USSA76 model at 86km, so the EPL integrand 
+!  functions have a special case for this to use the right endpoint
 b = 7
 sub = ''
 z0 = Zb(b)
@@ -176,13 +177,16 @@ Subroutine CheckEPLprecsShallow()
                 If (Floor(Prec(Ls,L0)) .GE. p) Then
                     If (Floor(Prec(GaussLegendreN(j+1,EPL_Integrand_dS,0._dp,Smax),L0)) .GE. Floor(Prec(Ls,L0))) Then
                         Write(*,'(A,I0)') ' gauss-pts for prec > ',p
-                        Write(unit,'(A,'//fmt_char//',A,I2,A,I0)') '      dS-p'//p_char//': ',Ls,'',': ',j,' gauss-pts for prec > ',p
+                        Write(unit,'(A,'//fmt_char//',A,I2,A,I0)') '      dS-p'//p_char//': ',Ls,'',': ',j, & 
+                                                                 & ' gauss-pts for prec > ',p
                         Exit
                     End If
                 End If
                 If (j .EQ. n_max) Then
-                    Write(*,'(A,'//fmt_char//',A,I0,A,I0,A)') ACHAR(13)//'      dS-p'//p_char//': ',Ls,'',': Prec ',p,' NOT MET w/ ',j,' gauss-pts'
-                    Write(unit,'(A,'//fmt_char//',A,I0,A,I0,A)') '      dS-p'//p_char//': ',Ls,'',': Prec ',p,' NOT MET w/ ',j,' gauss-pts'
+                    Write(*,'(A,'//fmt_char//',A,I0,A,I0,A)') ACHAR(13)//'      dS-p'//p_char//': ',Ls,'',': Prec ',p, & 
+                                                            & ' NOT MET w/ ',j,' gauss-pts'
+                    Write(unit,'(A,'//fmt_char//',A,I0,A,I0,A)') '      dS-p'//p_char//': ',Ls,'',': Prec ',p, & 
+                                                               & ' NOT MET w/ ',j,' gauss-pts'
                 End If
             End Do
         End Do
@@ -219,13 +223,16 @@ Subroutine CheckEPLprecsSteep
                 If (Floor(Prec(Ls,L0)) .GE. p) Then
                     If (Floor(Prec(GaussLegendreN(j+1,EPL_Integrand_dS,0._dp,Smax),L0)) .GE. Floor(Prec(Ls,L0))) Then
                         Write(*,'(A,I0)') ' gauss-pts for prec > ',p
-                        Write(unit,'(A,'//fmt_char//',A,I2,A,I0)') '      dS-p'//p_char//': ',Ls,'',': ',j,' gauss-pts for prec > ',p
+                        Write(unit,'(A,'//fmt_char//',A,I2,A,I0)') '      dS-p'//p_char//': ',Ls,'',': ',j, & 
+                                                                 & ' gauss-pts for prec > ',p
                         Exit
                     End If
                 End If
                 If (j .EQ. n_max) Then
-                    Write(*,'(A,'//fmt_char//',A,I0,A,I0,A)') ACHAR(13)//'      dS-p'//p_char//': ',Ls,'',': Prec ',p,' NOT MET w/ ',j,' gauss-pts'
-                    Write(unit,'(A,'//fmt_char//',A,I0,A,I0,A)') '      dS-p'//p_char//': ',Ls,'',': Prec ',p,' NOT MET w/ ',j,' gauss-pts'
+                    Write(*,'(A,'//fmt_char//',A,I0,A,I0,A)') ACHAR(13)//'      dS-p'//p_char//': ',Ls,'',': Prec ',p, & 
+                                                            & ' NOT MET w/ ',j,' gauss-pts'
+                    Write(unit,'(A,'//fmt_char//',A,I0,A,I0,A)') '      dS-p'//p_char//': ',Ls,'',': Prec ',p, & 
+                                                               & ' NOT MET w/ ',j,' gauss-pts'
                 End If
             End Do
             Do j = 3,n_max
@@ -234,13 +241,16 @@ Subroutine CheckEPLprecsSteep
                 If (Floor(Prec(Lz,L0)) .GE. p) Then
                     If (Floor(Prec(GaussLegendreN(j+1,EPL_Integrand_dZ,0._dp,dZ),L0)) .GE. Floor(Prec(Lz,L0))) Then
                         Write(*,'(A,I0)') ' gauss-pts for prec > ',p
-                        Write(unit,'(A,'//fmt_char//',A,I2,A,I0)') '      dZ-p'//p_char//': ',Lz,'',': ',j,' gauss-pts for prec > ',p
+                        Write(unit,'(A,'//fmt_char//',A,I2,A,I0)') '      dZ-p'//p_char//': ',Lz,'',': ',j, & 
+                                                                 & ' gauss-pts for prec > ',p
                         Exit
                     End If
                 End If
                 If (j .EQ. n_max) Then
-                    Write(*,'(A,'//fmt_char//',A,I0,A,I0,A)') ACHAR(13)//'      dZ-p'//p_char//': ',Lz,'',': Prec ',p,' NOT MET w/ ',j,' gauss-pts'
-                    Write(unit,'(A,'//fmt_char//',A,I0,A,I0,A)') '      dZ-p'//p_char//': ',Lz,'',': Prec ',p,' NOT MET w/ ',j,' gauss-pts'
+                    Write(*,'(A,'//fmt_char//',A,I0,A,I0,A)') ACHAR(13)//'      dZ-p'//p_char//': ',Lz,'',': Prec ',p, & 
+                                                            & ' NOT MET w/ ',j,' gauss-pts'
+                    Write(unit,'(A,'//fmt_char//',A,I0,A,I0,A)') '      dZ-p'//p_char//': ',Lz,'',': Prec ',p, & 
+                                                               & ' NOT MET w/ ',j,' gauss-pts'
                 End If
             End Do
         End Do
@@ -285,6 +295,8 @@ End Function EPL_Integrand_dZ
 Function rho_Isotherm(Z) Result(d)
     Use Kinds, Only: dp
     Implicit None
+    Real(dp) :: d
+    Real(dp), Intent(In) :: Z
     !Isothermal atmosphere parameter
     Real(dp), Parameter :: scale_Height_conv = 0.02927176966650182_dp
     
