@@ -246,7 +246,7 @@ Function Setup_Source(setup_file_name,resources_dir,run_file_name,source_file_na
         s%A_dist_index = source_EA_dist_tab
         s%E_dist_index = source_EA_dist_tab
         s%aniso_dist = .TRUE.
-        !UNDONE Coupled 2-d tabulated enegy-angle distribution
+        !UNDONE Coupled 2-d tabulated energy-angle distribution
         Call Output_Message('ERROR:  Sources: Setup_Source: Coupled Energy-Angle distribution not yet implemented.',kill=.TRUE.)
     Else  !independednt energy and angle distributions
         s%E_A_dist_coupled = .FALSE.
@@ -292,7 +292,18 @@ Function Setup_Source(setup_file_name,resources_dir,run_file_name,source_file_na
                 s%E_dist_index = source_E_dist_tab
             Case ('LunarAlb')
                 s%E_dist_index = source_E_dist_LunarAlbedo
-            !UNDONE Source distributions for Type 3, 5, 8, and 13
+            Case ('Type3')
+                s%E_dist_index = source_E_dist_Type3
+                s%Etab = Read_Etab(resources_dir,'Type03')
+            Case ('Type5')
+                s%E_dist_index = source_E_dist_Type5
+                s%Etab = Read_Etab(resources_dir,'Type05')
+            Case ('Type8')
+                s%E_dist_index = source_E_dist_Type8
+                s%Etab = Read_Etab(resources_dir,'Type08')
+            Case ('Type13')
+                s%E_dist_index = source_E_dist_Type13
+                s%Etab = Read_Etab(resources_dir,'Type13')
             Case ('LittleBoy')
                 s%E_dist_index = source_E_dist_LB
                 s%Etab = Read_Etab(resources_dir,'LB')
@@ -303,7 +314,7 @@ Function Setup_Source(setup_file_name,resources_dir,run_file_name,source_file_na
                 Call Output_Message('ERROR:  Sources: Setup_Source: Undefined source energy distribution',kill=.TRUE.)
         End Select
     End If
-    If (All(s%d .EQ. 0._dp) .AND. s%aniso_dist) Then  !no source direction is specified, but an anisotropic distribution is selected
+    If (All(s%d .EQ. 0._dp) .AND. s%aniso_dist) Then !no source direction is specified, but an anisotropic distribution is selected
         !source direction is needed for anisotropic angular distributions of emitted particles
         Call Output_Message( 'ERROR:  Sources: Setup_Source: Source forward direction must be specified for angular dist', & 
                            & kill=.TRUE. )
@@ -461,10 +472,10 @@ Subroutine Sample_Source(s,RNG,n)
             n%weight = fourPi * s%rad**2
         Case (source_geom_Sphere_V)
             n%r = s%r + RNG%Get_Random() * s%rad * Isotropic_Omega_hat(RNG)
-            n%weight = fourPi * s%rad**3 / 3._dp
+            n%weight = fourPi * s%rad**3 * one_third
         Case (source_geom_Sphere_V_unif)
             n%r = s%r + Cube_root(RNG%Get_Random()) * s%rad * Isotropic_Omega_hat(RNG)
-            n%weight = fourPi * s%rad**3 / 3._dp
+            n%weight = fourPi * s%rad**3 * one_third
         Case (source_geom_Albedo)
             !In the Albedo case, the orientation of the source must be adjusted to be at this emission point for this history
             s%A_hat = Isotropic_Omega_hat(RNG)
