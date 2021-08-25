@@ -1,32 +1,13 @@
 #!/bin/sh
-SCR_PATH="../source/common/scripts/"
-# CLEAN OLD BUILD FILES
-${SCR_PATH}clean
 
-# SET COMPILER FLAGS
-. ${SCR_PATH}set_flags
-. ${SCR_PATH}echo_flags
-
-# COMMON MODULES
-SRC_PATH="../source/common/"
-FNAME="Kinds"; . ${SCR_PATH}compile_it
-FNAME="Global"; . ${SCR_PATH}compile_it
-FNAME="Utilities"; . ${SCR_PATH}compile_it
-FNAME="FileIO_Utilities"; . ${SCR_PATH}compile_it
-FNAME="Interpolation"; . ${SCR_PATH}compile_it
-FNAME="Sorting"; . ${SCR_PATH}compile_it
-
-# PARTICLE UTILITIES MODULES
-SRC_PATH="../source/parts/"
-FNAME="cs_Utilities"; . ${SCR_PATH}compile_it
-FNAME="Neutron_Utilities"; . ${SCR_PATH}compile_it
-FNAME="n_Cross_Sections"; . ${SCR_PATH}compile_it
+#COMPILE
+. ./compile_n_Cross_Sections
 
 #TEST PROGRAM
 SRC_PATH="../testing/n_CS/"
 FNAME="testCS"
 echo "Compiling and linking testCS..."
-$COMP_NAME $GFORT_FLAGS -o ${SRC_PATH}${FNAME}${EXT} ${SRC_PATH}${FNAME}.f90 $OBJ_FILES
+$COMP_NAME $FORT_FLAGS -o ${SRC_PATH}${FNAME}${EXT} ${SRC_PATH}${FNAME}.f90 $OBJ_FILES
 echo "Copying resource files..."
 rm -fr ${SRC_PATH}Resources
 cp -r ../source/resources ${SRC_PATH}Resources

@@ -14,16 +14,16 @@
 !   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 !-------------------------------------------------------------------------------
 Module Atmospheres
-    
+
     Use Kinds, Only: dp
-    Implicit None    
+    Implicit None
     Private
     Public :: Atmosphere_Type
     Public :: EPL_Layer_Data
     Public :: Setup_Atmosphere
     Public :: Write_Atmosphere
     Public :: rho_SL,inv_rho_SL
-    
+
     Type :: EPL_Layer_Data
         !STRAIGHT PATHS
         !Q-points and precomputed values for zeta larger than 0.1 (integrate dZ)
@@ -44,13 +44,13 @@ Module Atmospheres
         Real(dp), Allocatable :: uRk(:)  !abscissa
         Real(dp), Allocatable :: wRk(:)  !weights
         Real(dp), Allocatable :: Bk(:)  !precomputed for full layer
-        Real(dp), Allocatable :: Ck(:)  !precomputed for full layer        
+        Real(dp), Allocatable :: Ck(:)  !precomputed for full layer    
         !Q-points for zeta smaller than 0.1 (integrate dTheta)
         Integer :: nTk  !number of q-points
         Real(dp), Allocatable :: uTk(:)  !abscissa
         Real(dp), Allocatable :: wTk(:)  !weights
     End Type
-    
+
     Type :: Atmosphere_Type
         Integer :: model_index
         Integer :: comp_index
@@ -80,7 +80,7 @@ Module Atmospheres
         Procedure, Pass :: T => Atm_Temperature  !returns atmosphere temperature at specified height
         Procedure, Pass :: rho => Atm_Density  !returns atmospheric density at specified heigh
     End Type
-    
+
     !Integer designator for atmosphere model choice, can have value equal to one of the following parameters
     Integer, Parameter :: atm_mod_IsoTherm = 31
     Integer, Parameter :: atm_mod_USstd1976 = 33
@@ -97,16 +97,16 @@ Module Atmospheres
     Integer, Parameter :: atm_comp_O18 = 135
     Integer, Parameter :: atm_comp_Ar40 = 137
     Integer, Parameter :: atm_comp_None = -1
-    
+
     !Uniform, Isothermal, and shared parameter
     !atmospheric density at seal level on a standard day according to US Standard Atmosphere 1976
     Real(dp), Parameter :: rho_SL = 1225.0002517923321962_dp  ![g/m^3]
     Real(dp), Parameter :: inv_rho_SL = 1._dp / rho_SL
-    
+
     !Isothermal atmosphere parameter
     !converts temperature to scale height for isothermal atmosphere model
     Real(dp), Parameter :: scale_Height_conv = 0.02927176966650182_dp  ![km/K]
-    
+
 Contains
 
 Function Setup_Atmosphere(setup_file_name,resources_dir,run_file_name,cs_file_name) Result(atm)
@@ -134,13 +134,14 @@ Function Setup_Atmosphere(setup_file_name,resources_dir,run_file_name,cs_file_na
     Logical, Allocatable :: diatomic(:)
     Integer :: i,j,k
     Character(4), Allocatable :: isotope_names(:)
+    Real(dp), Allocatable :: iso_fractions(:)
     Character(:), Allocatable :: f_name
     Real(dp) :: iso_fraction
     Integer :: n_absorption_modes,n_inelastic_lev
     Logical :: has_resonance
     Integer :: n_iso
     Logical :: has_atmosphere
-    
+
     Real(dp), Parameter :: Zb_1976_extended(0:16) = (/  Zb_1976(0), & !adds the sublayers present in USSA76
                                                      &  Zb_1976(1), &
                                                      &  Zb_1976(2), &
@@ -159,14 +160,14 @@ Function Setup_Atmosphere(setup_file_name,resources_dir,run_file_name,cs_file_na
                                                      &     500._dp, &
                                                      & Zb_1976(11)  /)
     Integer, Parameter :: bZb_1976_extended(1:16) = (/ 0,1,2,3,4,5,6,7,8,8,8,8,9,9,10,10 /) !base indexes for each sublayer
-    
+
     NameList /AtmosphereList/  atmosphere_model,ref_density,isothermal_temp, & 
                              & Z_top_atm,Z_bot_atm,wind_N,wind_E,composition
     NameList /csSetupList1/ n_elements
     NameList /csSetupList2/ el_fractions,n_isotopes
-    NameList /csSetupList3/ isotope_names,diatomic
+    NameList /csSetupList3/ isotope_names,diatomic,iso_fractions
     NameList /isoSetupList1/ iso_fraction,n_absorption_modes,n_inelastic_lev,has_resonance
-    
+
     Open(NEWUNIT = setup_unit , FILE = setup_file_name , STATUS = 'OLD' , ACTION = 'READ' , IOSTAT = stat)
     If (stat .NE. 0) Call Output_Message( 'ERROR:  Atmospheres: Setup_Atmosphere:  File open error, '//setup_file_name// & 
                                         & ', IOSTAT=',stat,kill=.TRUE.)
@@ -275,6 +276,7 @@ Function Setup_Atmosphere(setup_file_name,resources_dir,run_file_name,cs_file_na
         Allocate(atm%iso_ind(1:n_elements+1))
         Read(setup_unit,NML = csSetupList2)
         n_iso = Sum(n_isotopes)
+        Allocate(iso_fractions(1:n_iso))
         Allocate(isotope_names(1:n_iso))
         Allocate(diatomic(1:n_iso))
         Allocate(atm%iso_frac(1:n_iso))
@@ -292,22 +294,15 @@ Function Setup_Atmosphere(setup_file_name,resources_dir,run_file_name,cs_file_na
             End Do
         End Do
         Read(setup_unit,NML = csSetupList3)
+        atm%iso_frac = iso_fractions
         atm%diatomic = diatomic
         Close(setup_unit)
-        Do i = 1,n_iso
-            f_name = resources_dir//'cs'//slash//'n_cs'//slash//Trim(isotope_names(i))//slash//Trim(isotope_names(i))// & 
-                     & '_iso_setup.txt'
-            Open(NEWUNIT = setup_unit , FILE = f_name , STATUS = 'OLD' , ACTION = 'READ' , IOSTAT = stat)
-            Read(setup_unit,NML = isoSetupList1)
-            atm%iso_frac(i) = iso_fraction
-            Close(setup_unit)
-        End Do
         j = 1
         Do i = 1,n_elements
             atm%iso_frac(j:Sum(n_isotopes(1:i))) = atm%iso_frac(j:Sum(n_isotopes(1:i))) / & 
                                                  & Sum( atm%iso_frac(j:Sum(n_isotopes(1:i))) )
             j = Sum(n_isotopes(1:i)) + 1
-        End Do    
+        End Do
         atm%ref_density_ratio = ref_density / rho_SL
         atm%isothermal_temp = isothermal_temp
         atm%z_top = Z_top_atm
@@ -342,7 +337,7 @@ Subroutine Write_Atmosphere(a,file_name)
     Integer :: unit,stat
     Integer :: i
     Real(dp) :: z
-    
+
     Open(NEWUNIT = unit , FILE = file_name , STATUS = 'UNKNOWN' , ACTION = 'WRITE' , POSITION = 'APPEND' , IOSTAT = stat)
     If (stat .NE. 0) Call Output_Message( 'ERROR:  Atmospheres: Write_Atmosphere:  File open error, '//file_name// & 
                                         & ', IOSTAT=',stat,kill=.TRUE.)
@@ -427,7 +422,7 @@ Function Atm_Temperature(atm,z,lay) Result(T)
     Class(Atmosphere_Type), Intent(In) :: atm  !atmosphere model info
     Real(dp), Intent(In) :: z  ![km] geometric height
     Integer, Intent(In), Optional :: lay
-    
+
     Select Case (atm%model_index)
         Case (atm_mod_USstd1976)
             If (Present(lay)) Then
@@ -450,7 +445,7 @@ Function Atm_Density(atm,z,lay) Result(rho)
     Class(Atmosphere_Type), Intent(In) :: atm  !atmosphere model info
     Real(dp), Intent(In) :: z  ![km] geometric height
     Integer, Intent(In), Optional :: lay
-    
+
     Select Case (atm%model_index)
         Case (atm_mod_USstd1976)
             If (Present(lay)) Then
@@ -566,7 +561,7 @@ Subroutine Get_Q_points(dir,n,a,w)
     Character(:), Allocatable :: file_name
     Integer :: unit,stat
     Integer :: i
-    
+
     Allocate(Character(max_path_len) :: file_name)
     file_name = dir
     Write(n_char,'(I3.3)') n

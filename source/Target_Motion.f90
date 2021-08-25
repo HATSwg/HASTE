@@ -14,7 +14,7 @@
 !   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 !-------------------------------------------------------------------------------
 Module Target_Motion
-    
+
     Use Kinds, Only: dp
     Use Global, Only: k_Boltzmann
     Use Global, Only: keV_per_Joule
@@ -22,7 +22,7 @@ Module Target_Motion
     Private
     Public :: Random_Thermal_Velocity_AF
     Public :: Atm_Rotation_Velocity_AF
-    
+
     Interface Random_Thermal_Velocity_AF
         Module Procedure Random_Thermal_Velocity_Monatomic  ! (T, An)
         Module Procedure Random_Thermal_Velocity_Diatomic   ! (T, An, AnPrime, Mn)
@@ -47,7 +47,7 @@ Function Atm_Rotation_Velocity_AF(big_r,xi) Result(V)
     Real(dp) :: V(1:3)
     Real(dp), Intent(In) :: big_r  !distance from center of Earth
     Real(dp), Intent(In) :: xi  !cosine of lattitude
-    
+
     V = (/ rot_Earth * big_r * Sqrt(1._dp - xi**2), &
          & 0._dp, &
          & 0._dp /)
@@ -91,7 +91,7 @@ Function Random_Thermal_Velocity_Diatomic(T, An, AnPrime, Mn, RNG) Result(v)
                     !   and translational velocity of atom uniformly distributed in [-1,+1]
     Real(dp):: s    ! [km/s] speed of target atom resulting from thermal translation
                     !   combined with thermal rotation of diatomic molecule
-    
+
     st = Random_Thermal_Translational_Speed(T, Mn, RNG)
     sr = Random_Thermal_Rotational_Speed(T, An, AnPrime, Mn, RNG)
     mu = 2._dp * RNG%Get_Random() - 1._dp
@@ -117,12 +117,12 @@ Function Random_Thermal_Rotational_Speed(T, An, AnPrime, Mn, RNG) Result(speed)
     Real(dp):: Er               ! [keV] kinetic energy of the atom of interest
                                 ! due to rotation of the diatomic molecule
     Real(dp):: zr               ! [] nondimensionalized rotational energy of molecule
-    
+
     zr = -Log(1._dp - RNG%Get_Random())
     Er = (AnPrime / Mn) * zr * k_B * T
     speed = Neutron_Speed(Er / An)
 End Function Random_Thermal_Rotational_Speed
-    
+
 Function Random_Thermal_Translational_Speed(T, Mn, RNG) Result(speed)
     ! Samples random speed of translation of CM of molecule of perfect gas
     !   in thermodynamic equilibrium at temperature T [Kelvin]
@@ -139,7 +139,7 @@ Function Random_Thermal_Translational_Speed(T, Mn, RNG) Result(speed)
     Real(dp):: Et               ! [keV] kinetic energy of translation of molecule's CM
                                 !   in local rest frame of air
     Real(dp):: zt               ! [] Nondimensionalized speed = Sqrt(Et/(k*T))
-    
+
     zt = Sample_Nondimensional_Translational_Speed(RNG)
     Et = zt**2 * k_B * T
     speed = Neutron_Speed(Et / Mn)
@@ -209,7 +209,7 @@ Function Sample_Nondimensional_Translational_Speed(RNG) Result(zt)
         End do
     End if
     Return
-    
+
     Contains
         Function s1(zt) Result(s)
             Real(dp):: s
@@ -223,7 +223,7 @@ Function Sample_Nondimensional_Translational_Speed(RNG) Result(zt)
             Real(dp), Intent(In):: zt
             s = (2.0_dp - zt) * zt
         End Function s2
-    
+
         Function s4(zt) Result(s)
             Real(dp):: s
             Real(dp), Intent(In):: zt
@@ -237,7 +237,7 @@ Function Sample_Nondimensional_Translational_Speed(RNG) Result(zt)
             Real(dp), Parameter:: b = 112.0_dp / 45.0_dp
             s = a * Exp(-b * zt)
         End Function s5
-    
+
         Function S1Inverse(r) Result(zt)
             Real(dp):: zt
             Real(dp), Intent(In):: r
@@ -245,7 +245,7 @@ Function Sample_Nondimensional_Translational_Speed(RNG) Result(zt)
             Real(dp), Parameter:: b = 1.0_dp / 3.0_dp
             zt = a * r**b
         End Function S1Inverse
-    
+
         Function S2Inverse(r) Result(zt)
             Real(dp):: zt
             Real(dp), Intent(In):: r
@@ -254,7 +254,7 @@ Function Sample_Nondimensional_Translational_Speed(RNG) Result(zt)
             Real(dp), Parameter:: c = 0.66389_dp / 1.40625_dp
             zt = a + Sqrt(b + c * r)
         End Function S2Inverse
-    
+
         Function S3Inverse(r) Result(zt)
             Real(dp):: zt
             Real(dp), Intent(In):: r
@@ -262,7 +262,7 @@ Function Sample_Nondimensional_Translational_Speed(RNG) Result(zt)
             Real(dp), Parameter:: b = 49.0_dp / 150.0_dp
             zt = a + b * r
         End Function S3Inverse
-    
+
         Function S4Inverse(r) Result(zt)
             Real(dp):: zt
             Real(dp), Intent(In):: r
@@ -273,7 +273,7 @@ Function Sample_Nondimensional_Translational_Speed(RNG) Result(zt)
             Real(dp), Parameter:: e = 0.00053600480812538490_dp
             zt = (a + b * r) / (c + Sqrt(d - e * r))
         End Function S4Inverse
-    
+
         Function S5Inverse(r) Result(zt)
             Real(dp):: zt
             Real(dp), Intent(In):: r
@@ -283,7 +283,7 @@ Function Sample_Nondimensional_Translational_Speed(RNG) Result(zt)
             ! Note, most pseudo-random generators draw r in the interval 0 <= r < 1.
             ! For these, 1 - r is never zero, so the Log function does not fail.
         End Function S5Inverse
-    
+
         Function g(zt)
             Use Kinds, Only: dp
             Implicit None

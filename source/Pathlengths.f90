@@ -14,7 +14,7 @@
 !   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 !-------------------------------------------------------------------------------
 Module Pathlengths
-    
+
     Use Kinds, Only: dp
     Implicit None
     Private
@@ -29,7 +29,7 @@ Module Pathlengths
      Public :: zeta_downward
      Public :: S_upward
 #   endif
-    
+
     Interface Next_Event_L_to_edge
         Module Procedure NE_L_to_edge_straight
         Module Procedure NE_L_to_edge_orbit
@@ -39,19 +39,19 @@ Module Pathlengths
         Module Procedure L_to_S_exact
         !Module Procedure L_to_S_fast
     End Interface L_to_S
-    
+
     Interface zeta_downward
         Module Procedure zeta_downward_r1r_ca
         Module Procedure zeta_downward_r0r1zeta0
     End Interface zeta_downward
-    
+
     Interface EPL_upward
         Module Procedure EPL_straight_upward_layers
         Module Procedure EPL_straight_upward_full
         Module Procedure EPL_orbit_upward_layers
         Module Procedure EPL_orbit_upward_full
     End Interface EPL_upward
-    
+
 Contains
 
 Subroutine S_and_L_to_edge(atm,r0,z0,zeta0,s,L,nb,bb,Lb,db)
@@ -75,7 +75,7 @@ Subroutine S_and_L_to_edge(atm,r0,z0,zeta0,s,L,nb,bb,Lb,db)
     Real(dp), Allocatable :: Lb1(:),Lb2(:)
     Integer :: i,j
     Logical, Parameter :: highfi = .FALSE.
-    
+
     If (zeta0 .LT. 0._dp) Then  !direction is downward
         r_ca = R_close_approach(r0,zeta0)
         If (r_ca .LT. atm%R_bot) Then  !downward to earth
@@ -138,7 +138,7 @@ Function EPL(atm,r0,z0,zeta0,s) Result(L)
     Real(dp) :: L1,L2
     Real(dp) :: s_ca,r_ca,z_ca
     Real(dp) :: z1,r1,zeta1
-    
+
     If (zeta0 .LT. 0._dp) Then  !direction is downward
         s_ca = -zeta0 * r0
         r_ca = R_close_approach(r0,zeta0)
@@ -174,7 +174,7 @@ Function NE_L_to_edge_straight(atm,r0,z0,zeta0,L) Result(path_to_ground)
     Real(dp) :: r_ca
     Real(dp) :: L1,L2
     Logical, Parameter :: highfi = .FALSE.
-    
+
     path_to_ground = .FALSE.
     If (zeta0 .LT. 0._dp) Then  !direction is downward
         r_ca = R_close_approach(r0,zeta0)
@@ -209,7 +209,7 @@ Function NE_L_to_edge_orbit(atm,big_r,Sn,z0,zeta0,L) Result(path_to_ground)
     Real(dp) :: p,e,rp
     Real(dp) :: L1,L2
     Logical, Parameter :: highfi = .FALSE.
-    
+
     path_to_ground = .FALSE.  !for curved path implementation, LOS has already been checked, return default of FALSE
     h = big_r * Sn * Sqrt(1._dp - zeta0**2)
     xi = 0.5_dp * Sn**2 - mu / big_r
@@ -232,7 +232,7 @@ Function R_close_approach(big_r,zeta) Result(r_ca)
     Implicit None
     Real(dp) :: r_ca
     Real(dp), Intent(In) :: big_r,zeta
-    
+
     r_ca = big_r * Sqrt(1._dp - zeta**2)
 End Function R_close_approach
 
@@ -243,7 +243,7 @@ Function S_upward(big_R,dZ,zeta) Result(s)
     Real(dp), Intent(In) :: big_R  !R_center plus base altitude
     Real(dp), Intent(In) :: dZ  !change in altitude from big_R after distance s, must be positive
     Real(dp), Intent(In) :: zeta  !zenith cosine at R
-    
+
     s = dZ * (2._dp * big_R + dZ) / ( zeta * big_R + Sqrt( (zeta * big_R)**2 + dZ * (2._dp * big_R + dZ) ) )
 End Function S_upward
 
@@ -254,7 +254,7 @@ Function zeta_upward(r0,dZ,zeta0) Result(zeta1)
     Real(dp), Intent(In) :: r0  !R_center plus base altitude
     Real(dp), Intent(In) :: dZ  !change in altitude from big_R after distance s, must be positive
     Real(dp), Intent(In) :: zeta0  !zenith cosine at r0
-    
+
     zeta1 = Sqrt( (r0*zeta0)**2 + 2._dp*r0*dZ + dZ**2 ) / (r0 + dZ)
 End Function zeta_upward
 
@@ -266,7 +266,7 @@ Function zeta_orbit_upward(rp,vp,p,e,r1) Result(zeta)
     Real(dp), Intent(In) :: rp,vp,p,e
     Real(dp), Intent(In) :: r1
     Real(dp) :: v1
-    
+
     v1 =  Sqrt(mu * (2._dp / r1 - (1._dp - e**2) / p))
     zeta = 1._dp - (rp*vp / (r1*v1))**2
 End Function zeta_orbit_upward
@@ -278,7 +278,7 @@ Function zeta_downward_r1r_ca(r1,r_ca) Result(zeta1)
     Real(dp), Intent(In) :: r1  !radius at which new zeta is wanted
     Real(dp), Intent(In) :: r_ca  !radius of closest approach along the path
     Real(dp) :: x
-    
+
     !TODO Numerical conditioning can be improved
     x = 1._dp - (r_ca / r1)**2
     If (Abs(x) .LT. 10._dp*Spacing(1._dp)) Then
@@ -296,7 +296,7 @@ Function deltaZ(big_r,zeta,s)
     Real(dp), Intent(In) :: big_r
     Real(dp), Intent(In) :: zeta
     Real(dp), Intent(In) :: s
-            
+        
     deltaZ = Smaller_Quadratic_root(big_r,s*(2._dp*big_r*zeta + s))
 End Function
 
@@ -307,7 +307,7 @@ Function zeta_downward_r0r1zeta0(r0,r1,zeta0) Result(zeta1)
     Real(dp), Intent(In) :: r0  !R_center plus base altitude
     Real(dp), Intent(In) :: r1  !radius at which new zeta is wanted
     Real(dp), Intent(In) :: zeta0  !zenith cosine at r0
-    
+
     zeta1 = zeta_downward_r1r_ca(r1,R_close_approach(r0,zeta0))
 End Function zeta_downward_r0r1zeta0
 
@@ -345,7 +345,7 @@ Subroutine EPL_orbit_upward_full(atm,z0,zeta0,h,xi,p,e,rp,L,z1_in)
     Integer :: nb
     Integer, Allocatable :: bb(:)
     Real(dp), Allocatable :: Lb(:)
-    
+
     If (Present(z1_in)) Then
         Call EPL_orbit_upward_layers(atm,z0,zeta0,h,xi,p,e,rp,nb,bb,Lb,z1_in)
     Else
@@ -639,7 +639,7 @@ Function EPL_S_partial_layer(r1,z1,z2,zeta1,b,n,atm) Result(L)
     Real(dp) :: S
     Real(dp) :: Ss(1:n)
     Integer :: i
-    
+
     dZ = z2 - z1
     If (dZ .LE. 0._dp) Then
         L = 0._dp
@@ -662,7 +662,7 @@ Function EPL_S_known_layer(zeta,b,atm) Result(L)
     Real(dp), Intent(In) :: zeta
     Integer, Intent(In) :: b
     Type(Atmosphere_Type), Intent(In) :: atm
-    
+
     L = EPL_S_partial_layer(atm%Rb(b-1),atm%Zb(b-1),atm%Zb(b),zeta,b,atm%EPL_lay(b)%nS,atm)
 End Function EPL_S_known_layer
 
@@ -681,7 +681,7 @@ Function EPL_Z_partial_layer(r1,z1,z2,zeta1,b1,n,atm) Result(L)
     Real(dp) :: z(1:n)
     Real(dp) :: B(1:n),D(1:n)
     Integer :: i
-    
+
     dZ = z2 - z1
     If (dZ .LE. 0._dp) Then
         L = 0._dp
@@ -704,7 +704,7 @@ Function EPL_Z_known_layer(lay,zeta) Result(L)
     Real(dp) :: L
     Type(EPL_Layer_Data), Intent(In) :: lay
     Real(dp), Intent(In) :: zeta
-    
+
     L = EPL_Z_full_layer(zeta,lay%nZ,lay%A,lay%B,lay%C,lay%D)
 End Function EPL_Z_known_layer
 
@@ -718,7 +718,7 @@ Function EPL_Z_full_layer(zeta,n,A,B,C,D) Result(L)
     Real(dp), Intent(In) :: B(1:n)
     Real(dp), Intent(In) :: C
     Real(dp), Intent(In) :: D(1:n)
-    
+
     L = A * Sum( B / Sqrt( (C*zeta)**2 + D) )
 End Function EPL_Z_full_layer
 
@@ -740,7 +740,7 @@ Function EPL_Tk_partial_layer(z1,z2,p,e,b,n,atm) Result(L)
     Real(dp) :: cos_ts(1:n)
     Real(dp) :: dZs(1:n)
     Integer :: i
-    
+
     !UNDONE small delta theta will result in poorly conditioned limits of integration
     !UNDONE need to find well conditioned formulae for limits or change variables
     r1 = Rc + z1
@@ -768,7 +768,7 @@ Function EPL_Tk_partial_layer(z1,z2,p,e,b,n,atm) Result(L)
     Do i = 1,n
         L = L + atm%EPL_lay(b)%wTk(i)*atm%rho(z1 + dZs(i),b)*Sqrt(1._dp + e*e + 2._dp*e*cos_ts(i)) / ((1._dp + e*cos_ts(i))**2)
     End Do
-    L = 0.5_dp * dt * p * inv_rho_SL * L    
+    L = 0.5_dp * dt * p * inv_rho_SL * L
 End Function EPL_Tk_partial_layer
 
 Function EPL_Tk_known_layer(p,e,b,atm) Result(L)
@@ -779,7 +779,7 @@ Function EPL_Tk_known_layer(p,e,b,atm) Result(L)
     Real(dp), Intent(In) :: p,e
     Integer, Intent(In) :: b
     Type(Atmosphere_Type), Intent(In) :: atm
-    
+
     L = EPL_tk_partial_layer(atm%Zb(b-1),atm%Zb(b),p,e,b,atm%EPL_lay(b)%nTk,atm)
 End Function EPL_Tk_known_layer
 
@@ -799,7 +799,7 @@ Function EPL_Rk_partial_layer(z1,z2,p,e,rp,b1,n,atm) Result(L)
     Real(dp) :: z(1:n)
     Real(dp) :: B(1:n),C(1:n)
     Integer :: i
-    
+
     dZ = z2 - z1
     If (dZ .LE. 0._dp) Then
         L = 0._dp
@@ -821,7 +821,7 @@ Function EPL_Rk_known_layer(lay,p,e,rp) Result(L)
     Real(dp) :: L
     Type(EPL_Layer_Data), Intent(In) :: lay
     Real(dp), Intent(In) :: p,e,rp
-    
+
     L = EPL_Rk_full_layer(p,e,rp,lay%nRk,lay%A,lay%Bk,lay%Ck)
 End Function EPL_Rk_known_layer
 
@@ -836,7 +836,7 @@ Function EPL_Rk_full_layer(p,e,rp,n,A,B,C) Result(L)
     Real(dp), Intent(In) :: C(1:n)
     Real(dp) :: x(1:n),ra
     Real(dp) :: perpC(1:n)
-    
+
     If (e .GT. 1._dp) Then
         x = (p - C * (1._dp - e)) * ((1._dp + e) * (C - rp))
     Else
@@ -868,7 +868,7 @@ Function L_to_S_exact(atm,L,r0,z0,zeta0,nb,bb,Lb,db) Result(S)
     Real(dp) :: L0
     Integer :: i
     Real(dp) :: r_ca
-    
+
     !find the segment on which the desired S falls
     Do i = 1,nb-1
         If (Sum(Lb(1:i)) .GT. L) Exit
@@ -937,7 +937,7 @@ Function L_to_S_exact(atm,L,r0,z0,zeta0,nb,bb,Lb,db) Result(S)
                 !upward looking end of segment begins at lower layer boundary
                 r1 = atm%Rb(bb(i)-1)
                 z1 = atm%Zb(bb(i)-1)
-                zeta1 = zeta_upward(r0,z1-z0,zeta0)                
+                zeta1 = zeta_upward(r0,z1-z0,zeta0)            
             End If
             S0 = -zeta0 * r0 + S_upward(r_ca,r2-r_ca,0._dp)
         Else
@@ -980,7 +980,7 @@ Function L_to_S_from_top_of_segment(atm,b,L,Lmax,Smax,r1,z1,zeta1) Result(S)
     Real(dp) :: dZ,zeta
     Integer :: n_fix
     Integer :: i
-    
+
     !initialize bracketing variables
     S_high = Smax
     S_low = 0._dp

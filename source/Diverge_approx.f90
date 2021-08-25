@@ -14,12 +14,12 @@
 !   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 !-------------------------------------------------------------------------------
 Module Diverge_approx
-    
+
     Implicit None
     Private
     Public :: Div_Fact_Straight
     Public :: Div_Fact_by_shooting
-    
+
 Contains
 
 Function Div_Fact_Straight(r1,v1,r2,u,tof,vS2) Result(D)
@@ -34,7 +34,7 @@ Function Div_Fact_Straight(r1,v1,r2,u,tof,vS2) Result(D)
     Real(dp), Intent(In) :: vS2(1:3)
     Real(dp) :: r1_to_r2(1:3),dist_r1_to_r2
     Real(dp) :: cos_theta
-    
+
     r1_to_r2 = r2 - (r1 + u*tof)
     dist_r1_to_r2 = Vector_Length(r1_to_r2)
     D = 1._dp / ( dist_r1_to_r2**2 )
@@ -70,7 +70,7 @@ Function Div_Fact_by_shooting(r1,Omega_hat1cm,s1cm,u,tof,vS2,v2) Result(D)
     Real(dp) :: Surf_Normal(1:3)
     Real(dp) :: mag_Surf_Normal
     Real(dp), Parameter :: eps = 1.E-5_dp
-    
+
     !construct basis in which to perturb launch direction (Radial, Normal, Transverse directions IN CM FRAME)
     R_hat = Unit_Vector(r1)
     If (Abs(Dot_Product(Omega_hat1cm,R_hat)) .LT. 1._dp) Then

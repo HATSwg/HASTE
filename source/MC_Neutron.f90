@@ -18,13 +18,14 @@ Module MC_Neutron
     Implicit None
     Private
     Public :: Do_Neutron
-    
+
 Contains
 
-Subroutine Do_Neutron(s,d,atm,ScatMod,RNG,contributed)
+Subroutine Do_Neutron(s,d,CS,atm,ScatMod,RNG,contributed)
     Use Kinds, Only: id
     Use Sources, Only: Source_Type
     Use Detectors, Only: Detector_Type
+    Use n_Cross_Sections, Only: CS_type
     Use Atmospheres, Only: Atmosphere_Type
     Use Random_Numbers, Only: RNG_Type
     Use Neutron_Scatter, Only: Neutron_Type
@@ -32,6 +33,7 @@ Subroutine Do_Neutron(s,d,atm,ScatMod,RNG,contributed)
     Implicit None
     Type(Source_Type), Intent(InOut) :: s
     Type(Detector_Type), Intent(InOut) :: d
+    Type(CS_type), Intent(In) :: CS
     Type(Atmosphere_Type), Intent(In) :: atm
     Type(Scatter_Model_Type), Intent(InOut) :: ScatMod
     Type(RNG_Type), Intent(InOut) :: RNG
@@ -39,28 +41,28 @@ Subroutine Do_Neutron(s,d,atm,ScatMod,RNG,contributed)
     Type(Neutron_Type) :: n
     Logical :: leaked,absorbed  !indicates kill criteria met for leakage or absorption
     Integer :: scatter  !loop counter
-        
+
     !Start a new neutron
-    n = Start_Neutron(s,atm,RNG,ScatMod,d)
-    If (ScatMod%direct_contribution) Call First_Event_Neutron(n,ScatMod,s,d,atm)
+    n = Start_Neutron(s,CS,atm,RNG,ScatMod,d)
+    If (ScatMod%direct_contribution) Call First_Event_Neutron(n,CS,ScatMod,s,d,atm)
     If (ScatMod%n_scatters .NE. 0) Then
         scatter = 1
         !Transport the neutron for the desired number of scatters
         Do  !Exiting this loop kills the neutron
             !Move the neutron to the site of next collision and check for leakage
-            Call Move_Neutron(n,ScatMod,atm,RNG,leaked)
+            Call Move_Neutron(n,CS,ScatMod,atm,RNG,leaked)
             If (leaked) Then  !kill for leakage
                 ScatMod%n_kills(4) = ScatMod%n_kills(4) + 1_id
                 Exit
             End If
             !Choose scatter parameters for next scatter
-            Call ScatMod%Sample_Scatter(n,atm,RNG)
+            Call ScatMod%Sample_Scatter(n,CS,atm,RNG)
             If (scatter .EQ. ScatMod%n_scatters) Then  !neutron has reached final simulation position, scatter to detector and exit
                 ScatMod%n_kills(6) = ScatMod%n_kills(6) + 1_id
-                Call Next_Event_Neutron(n,ScatMod,d,atm,RNG)
+                Call Next_Event_Neutron(n,CS,ScatMod,d,atm,RNG)
                 Exit
             Else If (ScatMod%estimate_each_scatter) Then  !Scatter to detector and continue
-                Call Next_Event_Neutron(n,ScatMod,d,atm,RNG)
+                Call Next_Event_Neutron(n,CS,ScatMod,d,atm,RNG)
             End If
             !Scatter into new random direction and check for absorption
             Call Scatter_Neutron(n,ScatMod,RNG,absorbed)
@@ -71,17 +73,16 @@ Subroutine Do_Neutron(s,d,atm,ScatMod,RNG,contributed)
             If (ScatMod%n_scatters .EQ. -1) Then  !check kill criteria
                 If (Kill_Neutron(n%t,n%E,d%TE_Grid(1)%max,d%TE_grid(2)%min,ScatMod%n_kills(1:2))) Exit
                 If (ScatMod%roulette) Then
-                    If ( Roulette_Neutron( n%weight, & 
-                                        & ScatMod%roulette_weight, & 
-                                        & ScatMod%roulette_rate, & 
-                                        & ScatMod%roulette_mult, & 
-                                        & ScatMod%n_kills(3), & 
-                                        & RNG ) & 
-                    & ) Exit
+                    If ( Roulette_Neutron( n%weight,                & 
+                                         & ScatMod%roulette_weight, & 
+                                         & ScatMod%roulette_rate,   & 
+                                         & ScatMod%roulette_mult,   & 
+                                         & ScatMod%n_kills(3),      & 
+                                         & RNG                      ) ) Exit
                 End If
-            Else  !increment the scatter count and continue
-                scatter = scatter + 1
             End If
+            !increment the scatter count and continue
+            scatter = scatter + 1
         End Do
     Else !(n_scatters .EQ. 0), kill for final simulation position
         ScatMod%n_kills(6) = ScatMod%n_kills(6) + 1_id
@@ -95,9 +96,10 @@ Subroutine Do_Neutron(s,d,atm,ScatMod,RNG,contributed)
     End If
 End Subroutine Do_Neutron
 
-Function Start_Neutron(source,atm,RNG,ScatMod,detector) Result(n)
+Function Start_Neutron(source,CS,atm,RNG,ScatMod,detector) Result(n)
     Use Kinds, Only: dp
     Use Kinds, Only: id
+    Use n_Cross_Sections, Only: CS_Type
     Use Neutron_Scatter, Only: Neutron_Type
     Use Neutron_Scatter, Only: Scatter_Model_Type
     Use Neutron_Utilities, Only: Neutron_Energy
@@ -120,6 +122,7 @@ Function Start_Neutron(source,atm,RNG,ScatMod,detector) Result(n)
     Implicit None
     Type(Neutron_Type) :: n
     Type(Source_Type), Intent(InOut) :: source
+    Type(CS_Type), Intent(In) :: CS
     Type(Atmosphere_Type), Intent(In) :: atm
     Type(RNG_Type), Intent(InOut) :: RNG
     Type(Scatter_Model_Type), Intent(InOut) :: ScatMod
@@ -159,7 +162,7 @@ Function Start_Neutron(source,atm,RNG,ScatMod,detector) Result(n)
                 !upward/flat path or not low enough Z_closest_approach, this path will not intersect atmosphere, reject it
                 ScatMod%n_uncounted = ScatMod%n_uncounted + 1_id
                 !If direct contributions are being included, tally one before rejecting it to preserve statistics
-                If (ScatMod%direct_contribution) Call First_Event_Neutron(n,ScatMod,source,detector,atm)
+                If (ScatMod%direct_contribution) Call First_Event_Neutron(n,CS,ScatMod,source,detector,atm)
                 !sample new starting properties and try again
                 Call source%sample(RNG,n)  !New neutron properties depending on neutron source
             End Do
@@ -179,7 +182,7 @@ Function Start_Neutron(source,atm,RNG,ScatMod,detector) Result(n)
                 !upward/flat path or not low enough Z_closest_approach, this path will not intersect atmosphere, reject it
                 ScatMod%n_uncounted = ScatMod%n_uncounted + 1_id
                 !If direct contributions are being included, tally one before rejecting it
-                If (ScatMod%direct_contribution) Call First_Event_Neutron(n,ScatMod,source,detector,atm)
+                If (ScatMod%direct_contribution) Call First_Event_Neutron(n,CS,ScatMod,source,detector,atm)
                 !draw a new random energy and direction
                 Call source%sample(RNG,n)  !Initial energy and direction depending on neutron source
             End Do
@@ -188,7 +191,7 @@ Function Start_Neutron(source,atm,RNG,ScatMod,detector) Result(n)
 End Function Start_Neutron
 
 !TODO Procedures First_Event_Neutron and Attempt_Next_Event are similar... they can likely be combined with some generalization
-Subroutine First_Event_Neutron(n,ScatMod,s,d,atm)
+Subroutine First_Event_Neutron(n,CS,ScatMod,s,d,atm)
     Use Kinds, Only: dp
     Use Kinds, Only: id
     Use Global, Only: inv_FourPi
@@ -204,6 +207,7 @@ Subroutine First_Event_Neutron(n,ScatMod,s,d,atm)
     Use Pathlengths, Only: R_close_approach
     Use Pathlengths, Only: EPL_upward
     Use Pathlengths, Only: Next_Event_L_to_edge
+    Use n_Cross_Sections, Only: CS_Type
     Use Neutron_Scatter, Only: Neutron_Type
     Use Neutron_Scatter, Only: Scatter_Model_Type
     Use Neutron_Scatter, Only: Scattered_Angles
@@ -214,6 +218,7 @@ Subroutine First_Event_Neutron(n,ScatMod,s,d,atm)
     Use Astro_Utilities, Only: SME
     Implicit None
     Type(Neutron_Type), Intent(In) :: n
+    Type(CS_Type), Intent(In) :: CS
     Type(Scatter_Model_Type), Intent(InOut) :: ScatMod
     Type(Source_Type), Intent(InOut) :: s
     Type(Detector_Type), Intent(InOut) :: d
@@ -242,7 +247,7 @@ Subroutine First_Event_Neutron(n,ScatMod,s,d,atm)
     Real(dp) :: r_ca
     Real(dp) :: h,xi,p,e,s1
     Integer :: i
-        
+
     If (ScatMod%Gravity) Then !check if energy is adequate to reach detector
         If (SME(n%big_r,n%s0ef+s%speed) .LT. 0._dp) Then
             !neutron's max velocity is less than escape velocity, check if satellite altitude is achievable
@@ -369,15 +374,15 @@ Subroutine First_Event_Neutron(n,ScatMod,s,d,atm)
         If (xEff_top_atm .GT. 0._dp) Then
             If (s%exoatmospheric) Then
                 If (ScatMod%Doppler_Broaden) Then
-                    sigma_T1 = ScatMod%CS%sig_T_broad(Neutron_Energy(v1),atm%T(r_ca-Rc))
+                    sigma_T1 = CS%sig_T(Neutron_Energy(v1),atm%T(r_ca-Rc))
                 Else
-                    sigma_T1 = ScatMod%CS%sig_T(Neutron_Energy(v1))
+                    sigma_T1 = CS%sig_T(Neutron_Energy(v1))
                 End If
             Else
                 If (ScatMod%Doppler_Broaden) Then
-                    sigma_T1 = ScatMod%CS%sig_T_broad(Neutron_Energy(v1),atm%T(n%Z))
+                    sigma_T1 = CS%sig_T(Neutron_Energy(v1),atm%T(n%Z))
                 Else
-                    sigma_T1 = ScatMod%CS%sig_T(Neutron_Energy(v1))
+                    sigma_T1 = CS%sig_T(Neutron_Energy(v1))
                 End If
             End If
             w2 = w2 * Exp(-sigma_T1 * mfp_per_barn_per_km_at_seaLevel * xEff_top_atm)
@@ -389,10 +394,11 @@ Subroutine First_Event_Neutron(n,ScatMod,s,d,atm)
     End Do
 End Subroutine First_Event_Neutron
 
-Subroutine Move_Neutron(n,ScatMod,atm,RNG,leaked)
+Subroutine Move_Neutron(n,CS,ScatMod,atm,RNG,leaked)
     Use Kinds, Only: dp
     Use Global, Only: Rc => R_center
     Use Global, Only: mfp_per_barn_per_km_at_seaLevel
+    Use n_Cross_Sections, Only: CS_Type
     Use Neutron_Scatter, Only: Neutron_Type
     Use Neutron_Scatter, Only: Scatter_Model_Type
     Use Neutron_Utilities, Only: Neutron_Speed
@@ -408,6 +414,7 @@ Subroutine Move_Neutron(n,ScatMod,atm,RNG,leaked)
     Use Neutron_Scatter, Only: Apparent_Energy
     Implicit None
     Type(Neutron_Type), Intent(InOut) :: n
+    Type(CS_Type), Intent(In) :: CS
     Type(Scatter_Model_Type), Intent(In) :: ScatMod
     Type(Atmosphere_Type), Intent(In) :: atm
     Type(RNG_Type), Intent(InOut) :: RNG
@@ -432,9 +439,9 @@ Subroutine Move_Neutron(n,ScatMod,atm,RNG,leaked)
         E_apparent = n%E
     End If
     If (ScatMod%Doppler_Broaden) Then
-        sigma_T = ScatMod%CS%sig_T_broad(E_apparent,atm%T(n%Z)) * mfp_per_barn_per_km_at_seaLevel
+        sigma_T = CS%sig_T(E_apparent,atm%T(n%Z)) * mfp_per_barn_per_km_at_seaLevel
     Else
-        sigma_T = ScatMod%CS%sig_T(E_apparent) * mfp_per_barn_per_km_at_seaLevel
+        sigma_T = CS%sig_T(E_apparent) * mfp_per_barn_per_km_at_seaLevel
     End If
     !Compute distance (geometric and effective) to leak from system
     Call S_and_L_to_edge(atm,n%big_r,n%z,n%zeta,d_to_leak,xEff_to_leak,nb,bb,Lb,db)
@@ -446,12 +453,12 @@ Subroutine Move_Neutron(n,ScatMod,atm,RNG,leaked)
     End If
     leaked = .FALSE.
     P_not_leak = 1._dp - Exp(-sigma_T * xEff_to_leak)
+    xi = RNG%Get_Random()
     If (ScatMod%suppress_leakage) Then
         n%weight = n%weight * P_not_leak
-        tau = -Log(1._dp - RNG%Get_Random() * P_not_leak)
+        tau = -Log( 1._dp - xi * P_not_leak )
     Else
-        xi = RNG%Get_Random()
-        If (xi .GE. P_not_leak) Then
+        If (xi .GT. P_not_leak) Then
             leaked = .TRUE.
             Return
         Else
@@ -460,6 +467,12 @@ Subroutine Move_Neutron(n,ScatMod,atm,RNG,leaked)
     End If
     !compute EPL to next scatter
     xEff = tau / sigma_T
+    If (xEff .GT. xEff_to_leak) Then  !sampled pathlength exceeds pathlength to leak
+    !This accounts for "numerical" leakage due to numerical precision near the edge of the atmosphere
+        n%weight = 0._dp
+        leaked = .TRUE.
+        Return
+    End If
     !UNDONE Fast analog approximation to avoid EPL to distance rootsolve
     !If (ScatMod%fast_analog) Then  !apply non-analog approximation to get S from L (avoids root-solving)
         !d = L_to_S(atm,xEff,n%big_r,n%z,n%zeta,nb,bb,Lb,db,sigma_T,RNG,n%weight)
@@ -474,8 +487,9 @@ Subroutine Move_Neutron(n,ScatMod,atm,RNG,leaked)
     n%Z = n%big_r - Rc
 End Subroutine Move_Neutron
 
-Subroutine Next_Event_Neutron(n,ScatMod,d,atm,RNG)
+Subroutine Next_Event_Neutron(n,CS,ScatMod,d,atm,RNG)
     Use Kinds, Only: dp
+    Use n_Cross_Sections, Only: CS_Type
     Use Neutron_Scatter, Only: Neutron_Type
     Use Neutron_Scatter, Only: Scatter_Model_Type
     Use Neutron_Scatter, Only: Scatter_Data_Type
@@ -484,6 +498,7 @@ Subroutine Next_Event_Neutron(n,ScatMod,d,atm,RNG)
     Use Random_Numbers, Only: RNG_Type
     Implicit None
     Type(Neutron_Type), Intent(In) :: n
+    Type(CS_Type), Intent(In) :: CS
     Type(Scatter_Model_Type), Intent(InOut) :: ScatMod
     Type(Detector_Type), Intent(InOut) :: d
     Type(Atmosphere_Type), Intent(In) :: atm
@@ -493,30 +508,30 @@ Subroutine Next_Event_Neutron(n,ScatMod,d,atm,RNG)
     Integer :: n_lev
     Real(dp) :: E_cm
     Integer :: i_E_cm
-    
+
     If (ScatMod%all_mat_mech) Then
-        Call ScatMod%Set_Scatter_prep(scat)
+        Call ScatMod%Set_Scatter_prep(CS,scat)
         !set scatter parameters for each material/mechanism and compute next event
-        Do iso = 1,ScatMod%CS%n_iso
-            Call ScatMod%Set_Scatter_iso(n,atm,RNG,scat,iso,n_lev,E_cm,i_E_cm)
+        Do iso = 1,CS%n_iso
+            Call ScatMod%Set_Scatter_iso(n,CS,atm,RNG,scat,iso,n_lev,E_cm,i_E_cm)
             If (ScatMod%elastic_only) Then
-                Call ScatMod%Set_Scatter_lev(scat,0,E_cm,i_E_cm)
-                Call Attempt_Next_Event( n,ScatMod,d,atm,scat,scat%iso_cs(iso)*Sum(scat%lev_cs(0:n_lev)) )
+                Call ScatMod%Set_Scatter_lev(scat,CS,0,E_cm,i_E_cm)
+                Call Attempt_Next_Event( n,CS,ScatMod,d,atm,scat,scat%iso_cs(iso)*Sum(scat%lev_cs(0:n_lev)) )
             Else If (scat%iso_cs(iso) .GT. 0._dp) Then
                 Do lev = 0,n_lev
-                    Call ScatMod%Set_Scatter_lev(scat,lev,E_cm,i_E_cm)
-                    Call Attempt_Next_Event(n,ScatMod,d,atm,scat,scat%iso_cs(iso)*scat%lev_cs(lev))
+                    Call ScatMod%Set_Scatter_lev(scat,CS,lev,E_cm,i_E_cm)
+                    Call Attempt_Next_Event( n,CS,ScatMod,d,atm,scat,scat%iso_cs(iso)*scat%lev_cs(lev) )
                 End Do
             End If
             Deallocate(scat%lev_cs)
         End Do
     Else
         !compute a single next-event for the already sampled scatter parameters
-        Call Attempt_Next_Event(n,ScatMod,d,atm,ScatMod%scat)
+        Call Attempt_Next_Event(n,CS,ScatMod,d,atm,ScatMod%scat)
     End If
 End Subroutine Next_Event_Neutron
 
-Subroutine Attempt_Next_Event(n,ScatMod,d,atm,scat,w_scat)
+Subroutine Attempt_Next_Event(n,CS,ScatMod,d,atm,scat,w_scat)
     Use Kinds, Only: dp
     Use Kinds, Only: id
     Use Global, Only: inv_TwoPi,inv_FourPi
@@ -530,6 +545,7 @@ Subroutine Attempt_Next_Event(n,ScatMod,d,atm,scat,w_scat)
     Use Utilities, Only: Vector_Length
     Use Utilities, Only: Unit_Vector
     Use Pathlengths, Only: Next_Event_L_to_edge
+    Use n_Cross_Sections, Only: CS_type
     Use Neutron_Scatter, Only: Neutron_Type
     Use Neutron_Scatter, Only: Scatter_Model_Type
     Use Neutron_Scatter, Only: Scatter_Data_Type
@@ -541,6 +557,7 @@ Subroutine Attempt_Next_Event(n,ScatMod,d,atm,scat,w_scat)
     Use Astro_Utilities, Only: SME
     Implicit None
     Type(Neutron_Type), Intent(In) :: n
+    Type(CS_Type), Intent(In) :: CS
     Type(Scatter_Model_Type), Intent(InOut) :: ScatMod
     Type(Detector_Type), Intent(InOut) :: d
     Type(Atmosphere_Type), Intent(In) :: atm
@@ -568,7 +585,7 @@ Subroutine Attempt_Next_Event(n,ScatMod,d,atm,scat,w_scat)
     Real(dp) :: divCM  !divergence factor
     Logical :: no_LOS  !flag indicates path to detector intersects Earth
     Integer :: i
-        
+
     If (ScatMod%Gravity) Then !check if energy is adequate to reach detector
         If (SME(n%big_r,scat%s1cm+scat%u_speed) .LT. 0._dp) Then
         !neutron's max velocity is less than escape velocity, check if satellite altitude is achievable
@@ -612,9 +629,9 @@ Subroutine Attempt_Next_Event(n,ScatMod,d,atm,scat,w_scat)
         E2sat = Neutron_Energy(v2sat)
         !Check if time and energy are in range of the detector grid
         If ( E2sat .LT. d%TE_grid(2)%min .OR. &
-        & E2sat .GT. d%TE_grid(2)%max .OR. &
-        & tof   .LT. d%TE_grid(1)%min .OR. &
-        & tof   .GT. d%TE_grid(1)%max      ) Then !No contribution from this neutron due to out of range of detector grid
+           & E2sat .GT. d%TE_grid(2)%max .OR. &
+           & tof   .LT. d%TE_grid(1)%min .OR. &
+           & tof   .GT. d%TE_grid(1)%max      ) Then !No contribution from this neutron due to out of range of detector grid
             !Record reason for no contribution and return
             If (E2sat.LT.d%TE_grid(2)%min .OR. E2sat.GT.d%TE_grid(2)%max) Then  !E out of range, check for time range
                 If (tof.LT.d%TE_grid(1)%min .OR. tof.GT.d%TE_grid(1)%max) Then  !t also out of range
@@ -632,7 +649,7 @@ Subroutine Attempt_Next_Event(n,ScatMod,d,atm,scat,w_scat)
         !DIRECTION AT ARRIVAL
         Omega_hat2_sat = Unit_Vector(v2sat)
         !WEIGHT ADJUSTMENTS... Scattered angle, divergence, absorption & scatter suppression, decay
-        w2 = n%weight !initial value (neutron wt multiplied by scatter wt for all mat/mech and exoatmospheric wt adj where applicable)
+        w2 = n%weight !initial value (neutron wt times scatter wt for all mat/mech and exoatmospheric wt adj where applicable)
         If (Present(w_scat)) w2 = w2 * w_scat
         !Adjust for scatter angle
         Omega_hat1_cm = Unit_Vector(v1cm)
@@ -643,13 +660,15 @@ Subroutine Attempt_Next_Event(n,ScatMod,d,atm,scat,w_scat)
         If (ScatMod%aniso_dist) Then
             If (scat%da_is_Legendre) Then
                 w2 = w2 * dmu0cm_dmu0 * Legendre_pdf(mu0cm,scat%n_a,scat%a(0:scat%n_a)) * inv_TwoPi
-            Else
-                w2 = w2 * dmu0cm_dmu0 * inv_TwoPi * Tabular_Cosine_pdf( mu0cm, & 
-                                                                    & scat%n_a1, & 
-                                                                    & scat%a_tab1(1:scat%n_a1,:), & 
-                                                                    & scat%n_a2, & 
-                                                                    & scat%a_tab2(1:scat%n_a2,:), & 
-                                                                    & scat%a_tab_Econv )
+            Else If (scat%da_is_iso) Then
+                w2 = w2 * dmu0cm_dmu0 * inv_FourPi
+            Else !If (scat%da_is_tab) Then
+                w2 = w2 * dmu0cm_dmu0 * inv_TwoPi * Tabular_Cosine_pdf( mu0cm,                      & 
+                                                                      & scat%n_a1,                  & 
+                                                                      & scat%a_tab1(1:scat%n_a1,:), & 
+                                                                      & scat%n_a2,                  & 
+                                                                      & scat%a_tab2(1:scat%n_a2,:), & 
+                                                                      & scat%a_tab_Econv            )
             End If
         Else
             w2 = w2 * dmu0cm_dmu0 * inv_FourPi
@@ -665,9 +684,9 @@ Subroutine Attempt_Next_Event(n,ScatMod,d,atm,scat,w_scat)
         w2 = w2 * (1._dp - scat%sig_A / scat%sig_T)
         !Adjust for interaction suppression on the path out of the atmosphere
         If (ScatMod%Doppler_Broaden) Then
-            sigma_T1 = ScatMod%CS%sig_T_broad(Neutron_Energy(v1),atm%T(n%Z))
+            sigma_T1 = CS%sig_T(Neutron_Energy(v1),atm%T(n%Z))
         Else
-            sigma_T1 = ScatMod%CS%sig_T(Neutron_Energy(v1))
+            sigma_T1 = CS%sig_T(Neutron_Energy(v1))
         End If
         w2 = w2 * Exp(-sigma_T1 * mfp_per_barn_per_km_at_seaLevel * xEff_top_atm)
         !Adjust for free neutron decay
@@ -698,7 +717,7 @@ Subroutine Scatter_Neutron(n,ScatMod,RNG,absorbed)
     Real(dp) :: omega0cm  !isotropic azimuth for scatter in CM frame
     Real(dp) :: Omega_hat1_cm(1:3)  ![1 km]  velocity unit vectors in CM frame before and after collision
     Real(dp) :: v1(1:3)  ![km/s] velocity vector of neutron after collision 
-        
+
     !Check for absorption and absorption supression
     If (ScatMod%suppress_absorption) Then !adjust weight for ignored absorption possibility
         n%weight = n%weight * (1._dp - ScatMod%scat%sig_A / ScatMod%scat%sig_T)
@@ -711,18 +730,22 @@ Subroutine Scatter_Neutron(n,ScatMod,RNG,absorbed)
     absorbed = .FALSE.
     !Choose new direction based on scatter mechanic
     If (ScatMod%aniso_dist) Then
-        If (ScatMod%scat%da_is_Legendre) Then
-            mu0cm = Neutron_Anisotropic_mu0cm(ScatMod%scat%n_a,ScatMod%scat%a(0:ScatMod%scat%n_a),RNG)
+        If (ScatMod%scat%da_is_iso) Then
+            Omega_hat1_cm = Isotropic_Omega_hat(RNG)  !new isotropic direction
         Else
-            mu0cm = Neutron_Anisotropic_mu0cm( ScatMod%scat%n_a1, & 
-                                             & ScatMod%scat%a_tab1(1:ScatMod%scat%n_a1,:), & 
-                                             & ScatMod%scat%n_a2, & 
-                                             & ScatMod%scat%a_tab2(1:ScatMod%scat%n_a2,:), & 
-                                             & ScatMod%scat%a_tab_Econv, & 
-                                             & RNG )
+            If (ScatMod%scat%da_is_Legendre) Then
+                mu0cm = Neutron_Anisotropic_mu0cm(ScatMod%scat%n_a,ScatMod%scat%a(0:ScatMod%scat%n_a),RNG)
+            Else !If (ScatMod%scat%da_is_tab) Then
+                mu0cm = Neutron_Anisotropic_mu0cm( ScatMod%scat%n_a1,                          & 
+                                                 & ScatMod%scat%a_tab1(1:ScatMod%scat%n_a1,:), & 
+                                                 & ScatMod%scat%n_a2,                          & 
+                                                 & ScatMod%scat%a_tab2(1:ScatMod%scat%n_a2,:), & 
+                                                 & ScatMod%scat%a_tab_Econv,                   & 
+                                                 & RNG                                         )
+            End If
+            omega0cm = Isotropic_Azimuth(RNG)
+            Omega_hat1_cm = Scattered_Direction(mu0cm,omega0cm,ScatMod%scat%A_hat,ScatMod%scat%B_hat,ScatMod%scat%C_hat)
         End If
-        omega0cm = Isotropic_Azimuth(RNG)
-        Omega_hat1_cm = Scattered_Direction(mu0cm,omega0cm,ScatMod%scat%A_hat,ScatMod%scat%B_hat,ScatMod%scat%C_hat)
     Else
         Omega_hat1_cm = Isotropic_Omega_hat(RNG)  !new isotropic direction
     End If
@@ -742,7 +765,7 @@ Function Kill_Neutron(t,E,t_max,E_min,n_kills) Result(kill)
     Real(dp), Intent(In) :: E_min
     Real(dp), Intent(In) :: t_max
     Integer(8), Intent(InOut) :: n_kills(1:2)  !# of kills due to (1)Time, (2)Energy
-    
+
     kill = .FALSE.
     If (t .GT. t_max) Then
         kill = .TRUE.
@@ -766,7 +789,7 @@ Function Roulette_Neutron(weight,roulette_w,roulette_rate,roulette_mult,n_kills,
     Real(dp), Intent(In) :: roulette_mult
     Integer(id), Intent(InOut) :: n_kills  !# of kills due to roulette
     Type(RNG_Type), Intent(InOut) :: RNG
-    
+
     kill = .FALSE.
     If (weight .GT. roulette_w) Return  !no roulette procedure
     If (RNG%Get_Random() .GT. roulette_rate) Then  !kill

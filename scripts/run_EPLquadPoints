@@ -24,7 +24,7 @@ FNAME="USSA76"; . ${SCR_PATH}compile_it
 SRC_PATH="../testing/EPLquads/"
 FNAME="EPLquadpoints"
 echo "Compiling and linking EPLquadpoints..."
-$COMP_NAME $GFORT_FLAGS -o ${SRC_PATH}${FNAME}${EXT} ${SRC_PATH}${FNAME}.f90 $OBJ_FILES
+$COMP_NAME $FORT_FLAGS -o ${SRC_PATH}${FNAME}${EXT} ${SRC_PATH}${FNAME}.f90 $OBJ_FILES
 
 #RUN THE TEST PROGRAM
 echo "Running..."

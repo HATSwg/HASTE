@@ -14,10 +14,10 @@
 !   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 !-------------------------------------------------------------------------------
 Module Satellite_Motion
-    
+
     Use Kinds, Only: dp
     Implicit none
-    
+
 ! Cartesian coordinate basis vectors are inertial
 !   and are aligned with the rotational position of the Earth at time t = 0:
 !   XHat = (1,0,0)  Points toward the equator at 0 deg Longitude (Greenwich meridian)
@@ -27,11 +27,11 @@ Module Satellite_Motion
 !   that are needed can be done once,
 !   in establishing the satellites orbital parameters in this system,
 !   and are not required while tracking neutrons in the simulation.
-    
+
     Private
     Public :: Satellite_Position_Type
     Public :: Initialize_Satellite_Motion
-    
+
     Type Satellite_Position_Type
         Real(dp) :: r0(1:3)  !position vector at t=0
         Real(dp) :: v0(1:3)  !velocity vector at t=0
@@ -68,7 +68,7 @@ Subroutine Initialize_Satellite_Motion(resources_dir,motion_type,sat)
     Character(*), Intent(In) :: resources_dir
     Character(10), Intent(In) :: motion_type
     Type(Satellite_Position_Type), Intent(InOut) :: sat
-    
+
     Select Case(motion_type)
         Case('Stationary')
             sat%is_stationary = .TRUE.
@@ -137,7 +137,7 @@ Subroutine R_V_Satellite(s,t,r,v)
     Class(Satellite_Position_Type), Intent(In) :: s
     Real(dp), Intent(In) :: t
     Real(dp), Intent(Out) :: r(1:3),v(1:3)
-    
+
     If (s%is_conic) Then
         If (s%is_smooth) Then
             Call Kepler_Gooding(s%r0,s%v0,t,r,v)
@@ -161,7 +161,7 @@ Function R_Satellite(s,t) Result(r)
     Class(Satellite_Position_Type), Intent(In) :: s
     Real(dp), Intent(In) :: t
     Real(dp) :: v(1:3)
-    
+
     If (s%is_conic) Then
         If (s%is_smooth) Then
             Call Kepler_Gooding(s%r0,s%v0,t,r,v)
@@ -237,7 +237,7 @@ Subroutine Cleanup_Satellite_Position(s)
     Use Kinds, Only: dp
     Implicit None
     Class(Satellite_Position_Type), Intent(InOut) :: s
-    
+
     s%r0 = 0._dp
     s%v0 = Huge(s%v0)
     s%rp = 0._dp
@@ -282,5 +282,5 @@ Subroutine Read_sat_trace(resources_dir,n,ts,rs_vs)
     !Set t(1) as epoch, t=0
     ts = ts - ts(1)
 End Subroutine Read_sat_trace
-    
+
 End Module Satellite_Motion

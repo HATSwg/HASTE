@@ -17,7 +17,7 @@ Module Diverge_exact
 
     Implicit None
     Integer, Parameter:: dp = Selected_Real_Kind(p=15)
-    
+
     ! Mathematical Constants
     Integer, Parameter:: nMax = 10, nf = 6
     Real(dp), Parameter:: pi = 3.15159265359897932
@@ -25,43 +25,43 @@ Module Diverge_exact
     Real(dp):: BinomialCoefficient(0:nMax, 0:nMax)
     Real(dp):: Factorial(0:2*nMax), InverseFactorial(0:2*nMax)
     Real(dp):: Natural_Number(0:2*nMax)
-    
+
     ! Units
     !   Distance [km]
     !   Time [s]
     !   Speed [km/s]
     !   Angle [radian]
-    
+
     ! Physical Constants
     Real(dp), Parameter:: omegaEarth = 7.29212E-5_dp    ! radians / second
     Real(dp), Parameter:: muEarth = 3.986004418E+5_dp   ! km**3 / s**2
     Real(dp), Parameter:: neutronMass = 1.04541E-5_dp   ! keV / (km/s)**2
-    
+
     ! Real(dp):: cp2(1:2), cp3(1:3), cp3a(1:3)   
 
-    
+
     Interface Polynomial
         Module Procedure Polynomial_Scalar
         Module Procedure Polynomial_Vector
         Module Procedure Polynomial_Vector_Matrix
     End Interface Polynomial
-    
+
     Interface Delta_Polynomial
         Module Procedure Delta_Polynomial_1
         Module Procedure Delta_Polynomial_2
     End Interface Delta_Polynomial
-    
+
     Interface LegendreP
         Module Procedure LegendreP_Scalar   ! Inefficient: Wastes lower orders computed
         Module Procedure LegendreP_Vector   ! Efficient: Sequential but returns all orders computed
         Module Procedure LegendreP_Matrix   ! Most efficient: Vectorizes arithmentic for multiple values of x
     End Interface
-    
+
     Interface deltaCos
         Module Procedure deltaCos2
         Module Procedure deltaCos3
     End Interface deltaCos
-    
+
     Interface deltaSin
         Module Procedure deltaSin2
         Module Procedure deltaSin3
@@ -71,7 +71,7 @@ Module Diverge_exact
 
     ! This implementation of Divergence 
     !   assumes that the satellite is in a Circular Orbit
-    
+
 Subroutine Initialize_Diverge
     Integer:: i
     Do i = 1, 2 * nMax
@@ -98,13 +98,13 @@ Function Effective_Detector_Radius(vRel, vRelXSat, vRelYSat, vRelZSat) Result(rE
     ! Positive vRelZSat implies that neutron is approaching from below.
     ! This is a place-holder for a function
     !    that accounts for actual detector size and design.
-    
+
     !   To account for cross section variation for spherical detector, use the next line:
     ! rEff = rDetector * fEff(2.0_dp * rDetector * sigmaTotal(KE(vRel))
     !   where KE converts neutron speed in km/s to neutron energy in units used by cross section routine
     !   and fEff is provided next
     !   Also, rDetector could be a parameter variable or an argument
-    
+
     rEff = 1.0E-4_dp
 End Function Effective_Detector_Radius
 
@@ -120,7 +120,7 @@ Function fEff(tau)
     End if
 End Function fEff
 
-        
+    
 Function Detection_Solid_Angle_CM &
     & (r0Vec, v0Vec, rIntVec, vIntVec, &    ! intercept solution
     & vSat, AxisHatSat, &                   ! satellite circular orbit
@@ -178,7 +178,7 @@ Logical:: Collinear
 ! Tolerances
 Real(dp), Parameter:: Near_Vertical_Tol = 0.001_dp    ! about 42 miles at GEO 
 ! *** Do the others work to this tolerance?
-Real(dp), Parameter:: Near_Parabolic_Tol = 0.0001_dp    
+Real(dp), Parameter:: Near_Parabolic_Tol = 0.0001_dp
 ! *** where does accuracy of hyperbolic and elliptical formulas break down?
 Real(dp), Parameter:: Intercept_RelTol = 0.00001_dp
 ! *** What does Whit expect?
@@ -602,7 +602,7 @@ DeltaOmegaCM = Interaction_Area / ScaleFactor
 RETURN
 
 Contains
-    
+
     Subroutine Hyperbolic_DeltaT()
         If (Inbound) then
             Print *, "Error:: Hyperbolic_DeltaT : Inbound Intercept"
@@ -691,7 +691,7 @@ Contains
                 dDeltaT_dnuX = dtInt_dnuX + dt0_dnuX
                 dDeltaT_dnuY = dtInt_dnuY + dt0_dnuY
             End if
-        End if     
+        End if 
     End Subroutine Hyperbolic_DeltaT
   
     Subroutine Elliptical_DeltaT
@@ -788,7 +788,7 @@ Contains
             End if
         End if
     End Subroutine Elliptical_DeltaT
-     
+ 
     Subroutine Near_Parabolic_DeltaT
         Real(dp):: xi0
         Real(dp):: x0, f0, df0_dx0
@@ -888,7 +888,7 @@ Contains
             dtInt_dnuY = a * bInt * dkappa0_dnuY
             dDeltaT_dnuX = dtInt_dnuX - dt0_dnuX
             dDeltaT_dnuY = dtInt_dnuY - dt0_dnuY
-        End if       
+        End if   
     End Subroutine Hyperbolic_Near_Vertical_DeltaT
 
     Subroutine Elliptical_Near_Vertical_DeltaT 
@@ -929,7 +929,7 @@ Contains
                 DeltaT = Period - thetaInt - theta0
                 dDeltaT_dmu0CM = dPeriod_dmu0CM - dtInt_dmu0CM - dt0_dmu0CM
                 dDeltaT_domega0CM = dPeriod_domega0CM - dtInt_domega0CM - dt0_domega0CM
-            End if    
+            End if
         Else ! Collinear
             du0_dnuX = u0 * dkappa0_dnuX / tau
             du0_dnuY = u0 * dkappa0_dnuY / tau
@@ -950,7 +950,7 @@ Contains
                 DeltaT = Period - thetaInt - theta0
                 dDeltaT_dnuX = dPeriod_dnuX - dtInt_dnuX - dt0_dnuX
                 dDeltaT_dnuY = dPeriod_dnuY - dtInt_dnuY - dt0_dnuY
-            End if    
+            End if
         End if
     End Subroutine Elliptical_Near_Vertical_DeltaT
 
@@ -980,18 +980,18 @@ Contains
             dtInt_dmu0CM = tVPInt * dPoly_duInt *  uInt * dkappa0_dmu0CM / tau
             dtInt_domega0CM = tVPInt * dPoly_duInt *  uInt * dkappa0_domega0CM / tau
             dDeltaT_dmu0CM = dtInt_dmu0CM - dt0_dmu0CM
-            dDeltaT_domega0CM = dtInt_domega0CM - dt0_domega0CM        
+            dDeltaT_domega0CM = dtInt_domega0CM - dt0_domega0CM    
         Else ! Collinear
             dt0_dnuX = tVP0 * dPoly_du0 * u0 * dkappa0_dnuX / tau
             dt0_dnuY = tVP0 * dPoly_du0 *  u0 * dkappa0_dnuY / tau
             dtInt_dnuX = tVPInt * dPoly_duInt *  uInt * dkappa0_dnuX / tau
             dtInt_dnuY = tVPInt * dPoly_duInt *  uInt * dkappa0_dnuY / tau
             dDeltaT_dnuX = dtInt_dnuX - dt0_dnuX
-            dDeltaT_dnuY = dtInt_dnuY - dt0_dnuY        
+            dDeltaT_dnuY = dtInt_dnuY - dt0_dnuY    
         End if
     End Subroutine Parabolic_Near_Vertical_DeltaT
 
-        
+    
 
     Subroutine g_NPDT(xi, dxi, g, a, b)
         Real(dp), Intent(In):: xi, dxi
@@ -1011,15 +1011,15 @@ Contains
         End if
     End Subroutine g_NPDT
 
-        
+    
     ! Subroutine Numerical_Quadrature_DeltaT_DeltaTheta
         ! Add later for testing and possible use ?
     ! End Subroutine Numerical_Quadrature_DeltaT_DeltaTheta  
-        
+    
 End Function Detection_Solid_Angle_CM
-    
+
 ! DivergenceFactor Helper Routines (not contained)
-    
+
 Subroutine Near_Parabolic_T (xi, t, delta_e, de_dchi1, de_dchi2, &
     & theta, dtheta_dchi1, dtheta_dchi2, p, dp_dchi1, dp_dchi2, &
     & h, dh_dchi1, dh_dchi2, dt_dchi1, dt_dchi2)
@@ -1055,7 +1055,7 @@ Subroutine Near_Parabolic_T (xi, t, delta_e, de_dchi1, de_dchi2, &
         & - 1.5_dp * de_dchi2 / (1.0_dp + e)) &
         & + p * h * dg_dchi2 / (muEarth * (1.0_dp + e) * Sqrt(1.0_dp + e))
 End Subroutine Near_Parabolic_T
-    
+
 Function Find_xi(de, tanHalfTheta) Result (xi)
     Real(dp), Intent(In):: de   ! delta_e
     Real(dp), Intent(In):: tanHalfTheta
@@ -1071,8 +1071,8 @@ Function Find_xi(de, tanHalfTheta) Result (xi)
         If (abs(xi-xiOld) <= f_RelTol * xi) Return
     End do
 End Function Find_xi
-    
-    
+
+
 Subroutine f_NPDT(x, f, df_dx)
     Real(dp), Intent(In):: x
     Real(dp), Intent(Out):: f
@@ -1096,9 +1096,9 @@ End Subroutine f_NPDT
 
 
 ! UTILITIES
-    
+
     ! Vector Utilities
-    
+
 Function Hat(x)
     Real(dp):: x(1:3)
     Real(dp):: Hat(1:3)
@@ -1258,7 +1258,7 @@ Subroutine LegendreP_Vector(x, P, L)
         Case(0)
             P(0) = 1.0_dp
         End Select
-        
+    
 End Subroutine LegendreP_Vector
 
 Subroutine LegendreP_Matrix(x, P, L, N)
@@ -1281,7 +1281,7 @@ Subroutine LegendreP_Matrix(x, P, L, N)
             P(:,1) = x
         Case(0)
             P(:,0) = 1.0_dp
-        End Select            
+        End Select        
 End Subroutine LegendreP_Matrix
 
 

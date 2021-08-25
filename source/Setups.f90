@@ -26,7 +26,7 @@ Module Setups
         Public :: Setup_Info_from_disk
         Public :: Cleanup_temp_files
 #   endif
-    
+
     Type :: Paths_Files_Type
         Character(:), Allocatable :: app_title !name of program
         Character(:), Allocatable :: app_ver !version number of program
@@ -50,10 +50,11 @@ Module Setups
         Character(:), Allocatable :: o_file_name
         Character(:), Allocatable :: ss_file_name
         Character(:), Allocatable :: s_file_name
+        Character(:), Allocatable :: cs_summary_file_name
     Contains
         Procedure, Pass :: Initialize => Initialize_Paths_Files
     End Type
-    
+
 Contains
 
 Subroutine Setup_HASTE(prompt_for_exit,screen_progress,paths_files,n_neutron_histories,absolute_n_histories,setup_file)
@@ -83,11 +84,11 @@ Subroutine Setup_HASTE(prompt_for_exit,screen_progress,paths_files,n_neutron_his
     Logical :: interim_outputs
     Character(4) :: interim_unit
     Integer :: interim_period
-    
+
     NameList /ProgramSetupList/   prompt_for_exit,screen_progress, &
                                 & output_folder,file_suffix,force_overwrite, &
                                 & interim_outputs,interim_unit,interim_period
-    
+
     Call paths_files%Initialize()
     Allocate(Character(max_path_len) :: output_folder)
     Allocate(Character(max_path_len) :: file_suffix)
@@ -147,6 +148,7 @@ Subroutine Setup_HASTE(prompt_for_exit,screen_progress,paths_files,n_neutron_his
                                  & paths_files%o_file_name, & 
                                  & paths_files%ss_file_name, & 
                                  & paths_files%s_file_name, & 
+                                 & paths_files%cs_summary_file_name, & 
                                  & paths_files%run_file_name )
     !Create backup setup file in results folder and write namelist
     If (Worker_Index() .EQ. 1) Then
@@ -163,12 +165,34 @@ Subroutine Setup_HASTE(prompt_for_exit,screen_progress,paths_files,n_neutron_his
     Call Setup_Estimator(paths_files%setup_file,paths_files%run_file_name,n_neutron_histories,absolute_n_histories)
 End Subroutine Setup_HASTE
 
-Subroutine Create_Output_File_names(dir,suff,log_name,TE_name,T_name,E_name,F_name,D_name,M_name,O_name,SS_name,S_name,run_name)
+Subroutine Create_Output_File_names( dir,suff, & 
+                                   & log_name, & 
+                                   & TE_name, & 
+                                   & T_name, & 
+                                   & E_name, & 
+                                   & F_name, & 
+                                   & D_name, & 
+                                   & M_name, & 
+                                   & O_name, & 
+                                   & SS_name, & 
+                                   & S_name, & 
+                                   & CS_name, & 
+                                   & run_name )
     Implicit None
     Character(*), Intent(In) :: dir,suff
-    Character(:), Allocatable, Intent(InOut) :: log_name,TE_name,T_name,E_name,F_name,D_name,M_name,O_name,SS_name,S_name
+    Character(:), Allocatable, Intent(InOut) :: log_name
+    Character(:), Allocatable, Intent(InOut) :: TE_name
+    Character(:), Allocatable, Intent(InOut) :: T_name
+    Character(:), Allocatable, Intent(InOut) :: E_name
+    Character(:), Allocatable, Intent(InOut) :: F_name
+    Character(:), Allocatable, Intent(InOut) :: D_name
+    Character(:), Allocatable, Intent(InOut) :: M_name
+    Character(:), Allocatable, Intent(InOut) :: O_name
+    Character(:), Allocatable, Intent(InOut) :: SS_name
+    Character(:), Allocatable, Intent(InOut) :: S_name
+    Character(:), Allocatable, Intent(InOut) :: CS_name
     Character(:), Allocatable, Intent(InOut), Optional :: run_name
-    
+
     !Construct file names
     !Construct log file name
     log_name = dir//'HASTE-Log'//suff//'.txt'
@@ -183,6 +207,7 @@ Subroutine Create_Output_File_names(dir,suff,log_name,TE_name,T_name,E_name,F_na
     O_name = dir//'ArrDirs_omega'//suff//'.txt'
     SS_name = dir//'SliceShape'//suff
     S_name = dir//'Source'//suff//'.txt'
+    CS_name = dir//'n_CS_summary'//suff//'.txt'
 End Subroutine Create_Output_File_names
 
 Subroutine Check_files_exist(overwrite,n_cmd_args,paths_files)
@@ -192,7 +217,7 @@ Subroutine Check_files_exist(overwrite,n_cmd_args,paths_files)
     Logical, Intent(In) :: overwrite
     Integer, Intent(In) :: n_cmd_args
     Type(paths_files_type), Intent(InOut) :: paths_files
-    Integer, Parameter :: n_names = 8
+    Integer, Parameter :: n_names = 10
     Logical :: file_exists(1:n_names)
     Character(max_path_len) :: file_name(1:n_names)
     Character(64) :: user_inp
@@ -208,6 +233,8 @@ Subroutine Check_files_exist(overwrite,n_cmd_args,paths_files)
         file_name(6) = paths_files%results_directory//paths_files%output_folder//'ArrDirs_mu'//paths_files%file_suffix//'.txt'
         file_name(7) = paths_files%results_directory//paths_files%output_folder//'ArrDirs_omega'//paths_files%file_suffix//'.txt'
         file_name(8) = paths_files%results_directory//paths_files%output_folder//'HASTE-Log'//paths_files%file_suffix//'.txt'
+        file_name(9) = paths_files%results_directory//paths_files%output_folder//'Source'//paths_files%file_suffix//'.txt'
+        file_name(10) = paths_files%results_directory//paths_files%output_folder//'n_CS_summary'//paths_files%file_suffix//'.txt'
         Do i = 1,n_names
             INQUIRE(FILE = file_name(i) , EXIST = file_exists(i))
         End Do
@@ -285,7 +312,7 @@ Subroutine Check_folders_exist(paths_files)
     Use FileIO_Utilities, Only: Output_Message
     Implicit None
     Type(paths_files_type), Intent(In) :: paths_files
-    
+
     !Check if resources directories exist
     If (.NOT. Check_Directory(paths_files%resources_directory)) Then
         Call Output_Message( 'ERROR:  Setups: Setup_HASTE:  Resources directory not found: '// & 
@@ -304,9 +331,9 @@ Subroutine Setup_Estimator(setup_file_name,run_file_name,n_neutron_histories,abs
     Integer(id), Intent(Out) :: n_neutron_histories
     Logical, Intent(Out) :: absolute_n_histories
     Integer :: setup_unit,stat
-    
+
     NameList /EstimatorSetupList/ n_neutron_histories,absolute_n_histories
-    
+
     !open setup file and read namelist
     Open(NEWUNIT = setup_unit , FILE = setup_file_name , STATUS = 'OLD' , ACTION = 'READ' , IOSTAT = stat)
     If (stat .NE. 0) Call Output_Message( 'ERROR:  Setups: Setup_Estimator:  File open error, '//setup_file_name// & 
@@ -399,6 +426,8 @@ Subroutine Setup_Info_to_disk(n_histories,abs_n_histories,prompt_for_exit,screen
     Call Var_to_File(paths_files%ss_file_name,file_name)
     file_name = file_dir//'pf_s_f.tmp'
     Call Var_to_File(paths_files%s_file_name,file_name)
+    file_name = file_dir//'pf_cs_f.tmp'
+    Call Var_to_File(paths_files%cs_summary_file_name,file_name)
 End Subroutine Setup_Info_to_disk
 # endif
 
@@ -419,7 +448,7 @@ Subroutine Setup_Info_from_disk(n_histories,abs_n_histories,prompt_for_exit,scre
     Character(max_path_len) :: dir
     Character(:), Allocatable :: file_name,file_dir
     Character(max_path_len) :: C_tmp
-    
+
     Call Working_Directory(GETdir=dir,s=slash)
     Allocate(Character(max_path_len) :: file_dir)
     file_dir = Trim(dir)//'temp'//slash
@@ -499,6 +528,9 @@ Subroutine Setup_Info_from_disk(n_histories,abs_n_histories,prompt_for_exit,scre
     file_name = file_dir//'pf_s_f.tmp'
     Call Var_from_File(C_tmp,file_name)
     paths_files%s_file_name = Trim(C_tmp)
+    file_name = file_dir//'pf_cs_f.tmp'
+    Call Var_from_File(C_tmp,file_name)
+    paths_files%cs_summary_file_name = Trim(C_tmp)
 End Subroutine Setup_Info_from_disk
 # endif
 
@@ -510,7 +542,7 @@ Subroutine Cleanup_temp_files()
     Use FileIO_Utilities, Only: Delete_Directory
     Implicit None
     Character(max_path_len) :: dir
-    
+
     Call Working_Directory(GETdir=dir,s=slash)
     !delete the temp directory
     Call Delete_Directory(Trim(dir)//'temp')
@@ -564,6 +596,8 @@ Subroutine Initialize_Paths_Files(paths_files)
     paths_files%ss_file_name = empty_string
     Allocate(Character(max_path_len) :: paths_files%s_file_name)
     paths_files%s_file_name = empty_string
+    Allocate(Character(max_path_len) :: paths_files%cs_summary_file_name)
+    paths_files%s_file_name = empty_string
 End Subroutine Initialize_Paths_Files
 
 Subroutine Write_Setup_Information(n_img,t_runs,t_waits,n_h_hit,n_h_run,RNG,paths_files,file_name)
@@ -587,7 +621,7 @@ Subroutine Write_Setup_Information(n_img,t_runs,t_waits,n_h_hit,n_h_run,RNG,path
     Character(80) :: hostname
     Integer :: unit,stat
     Integer :: i
-    
+
     Open(NEWUNIT = unit , FILE = file_name , STATUS = 'UNKNOWN' , ACTION = 'WRITE' , POSITION = 'APPEND' , IOSTAT = stat)
     If (stat .NE. 0) Call Output_Message( 'ERROR:  Setups: Write_Setup_Information:  File open error, '//file_name// & 
                                         & ', IOSTAT=',stat,kill=.TRUE. )
@@ -649,6 +683,7 @@ Subroutine Write_Setup_Information(n_img,t_runs,t_waits,n_h_hit,n_h_run,RNG,path
     Write(unit,'(2A)') '    Arr Dirs omega file:  ',paths_files%o_file_name
     Write(unit,'(2A)') '    Slice Shape files:    ',paths_files%ss_file_name//'<<...>>.txt'
     Write(unit,'(2A)') '    Source Data file:     ',paths_files%s_file_name
+    Write(unit,'(2A)') '    CS Summary file:      ',paths_files%cs_summary_file_name
     Write(unit,*)
     Write(unit,'(A,I11)') '  RNG Seed: ',RNG%seed
     Write(unit,'(A,I11)') '  RNG Array Length:    ',RNG%q_size

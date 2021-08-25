@@ -14,7 +14,7 @@
 !   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 !-------------------------------------------------------------------------------
 Module Tallies
-    
+
     Use Kinds, Only: dp
     Implicit None
     Private
@@ -23,17 +23,17 @@ Module Tallies
     Public :: Contrib_array
     Public :: Setup_Tallies
     Public :: Clear_Tallies
-    
+
     Type :: Contrib_triplet
         Integer :: i1
         Integer :: i2
         Real(dp) :: f  !sum of contributions over all histories to the bin
     End Type
-    
+
     Type, Extends(Contrib_triplet) :: Contrib_quadruplet
         Real(dp) :: f_sq  !sum of squared contributions over all histories to the bin
     End Type
-    
+
     Type :: Contrib_array
         Real(dp) :: tot_f_sq  !sum of squared contributions for computing variance of total flux at the detector
         !sum of squared contributions for computing variance of total flux in each n-th index bin at the detector
@@ -48,7 +48,7 @@ Module Tallies
         Procedure, Pass :: Save_Contrib_Array
         Procedure, Pass :: Load_Contrib_Array
     End Type
-    
+
 Contains
 
 Pure Function Setup_Tallies(n_1_bins,n_2_bins) Result(t)
@@ -57,7 +57,7 @@ Pure Function Setup_Tallies(n_1_bins,n_2_bins) Result(t)
     Type(Contrib_array) :: t
     Integer, Intent(In) :: n_1_bins
     Integer, Intent(In) :: n_2_bins
-    
+
     t%tot_f_sq = 0._dp
     Allocate(t%f_sq_1(1:n_1_bins))
     t%f_sq_1 = 0._dp
@@ -279,7 +279,7 @@ Subroutine Resize_Contrib_Array(list,n)
     Type(Contrib_array), Intent(InOut) :: list
     Integer, Intent(In) :: n  !number of elements to add
     Type(Contrib_quadruplet), Allocatable :: swap(:)
-        
+
     Allocate(swap(1:list%size))
     swap = list%contribs
     Deallocate(list%contribs)
@@ -305,7 +305,7 @@ Subroutine Save_Contrib_Array(list,dir,desc,ext_in)
     Character(4) :: i_char
     Character(:), Allocatable :: fname
     Character(4) :: ext
-    
+
     If (Present(ext_in)) Then  !use the specified file extension
         ext = '.'//ext_in
     Else  !default file extension is .BIN for unformatted binary files
@@ -347,7 +347,7 @@ Subroutine Load_Contrib_Array(list,dir,desc,ext_in)
     Character(4) :: i_char
     Character(:), Allocatable :: fname
     Character(4) :: ext
-    
+
     If (Present(ext_in)) Then  !use the specified file extension
         ext = '.'//ext_in
     Else  !default file extension is .BIN for unformatted binary files

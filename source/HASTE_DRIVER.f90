@@ -37,11 +37,11 @@
 !   0.9    Major portability revision: gFortran compiler, IA32/IA64/ARM 
 !          architectures now supported
 !   0.10   Add albedo sources and limited-function adjoint solver routines.
+!   0.11   Revise neutron cross sections data and procedures.
 !-------------------------------------------------------------------------------
 Program HASTE
 
 Use Kinds, Only: dp  !double precision real
-Use Kinds, Only: il  !long integer
 Use Kinds, Only: id  !double integer
 Use Random_Numbers, Only: RNG_Type
 Use Random_Numbers, Only: Setup_RNG
@@ -55,8 +55,11 @@ Use Sources, Only: Setup_Source
 Use Detectors, Only: Detector_Type
 Use Detectors, Only: Setup_Detector
 Use Detectors, Only: Close_Slice_Files
+Use n_Cross_Sections, Only: CS_type
+Use n_Cross_Sections, Only: Setup_Cross_Sections
 Use Neutron_Scatter, Only: Scatter_Model_Type
 Use Neutron_Scatter, Only: Setup_Scatter_Model
+Use Neutron_Scatter, Only: Finish_Scatter_Model_Setup
 Use MC_Neutron, Only: Do_Neutron
 Use Tallies, Only: Contrib_array
 Use Tallies, Only: Setup_Tallies
@@ -81,13 +84,14 @@ Use FileIO_Utilities, Only: Delta_Time
 Implicit None
 
 Character(max_line_len), Parameter :: title = 'High-Altitude to Space Transport Estimator for Neutrons (HASTEn)'
-Character(max_line_len), Parameter :: ver =   '    v0.10.00, 2 Jun 2020'
+Character(max_line_len), Parameter :: ver =   '    v0.11.00, 18 Aug 2021'
 Integer(id) :: n_histories
 Logical :: absolute_n_histories  !specifies whether number of histories is an absolute limit or a target number of contributions   
 Logical :: prompt_exit  !specifies whether the simulation will wait for user unput before exiting
 Logical :: screen_progress  !determines if progress will be updated on screen during run
 Type(Source_Type) :: source  !contains data defining neutron source
 Type(Detector_Type) :: detector  !contains data defining detector
+Type(CS_Type) :: CrossSections  !contains data defining the neutron interaction cross sections
 Type(Scatter_Model_Type) :: ScatterModel  !contains data defining the neutron scattering model
 Type(Contrib_array) :: TE_Tallies  !list of contributions tallied to time-energy bins
 Type(Contrib_array) :: Dir_Tallies  !list of contributions tallied to arrival direction bins
@@ -137,11 +141,20 @@ atmosphere = Setup_Atmosphere( paths_files%setup_file,          &
                              & paths_files%resources_directory, & 
                              & paths_files%run_file_name,       & 
                              & paths_files%cs_setup_file        )
-ScatterModel = Setup_Scatter_Model( paths_files%setup_file,          & 
-                                  & paths_files%resources_directory, & 
-                                  & paths_files%cs_setup_file,       & 
-                                  & paths_files%run_file_name,       & 
-                                  & atmosphere%model_index           )
+ScatterModel = Setup_Scatter_Model(paths_files%setup_file,paths_files%run_file_name,atmosphere%model_index)
+If (atmosphere%model_index .NE. -1) Then!load cross sections
+    CrossSections = Setup_Cross_Sections( paths_files%resources_directory,  & 
+                                        & paths_files%cs_setup_file,        & 
+                                        & paths_files%cs_summary_file_name, & 
+                                        & ScatterModel%elastic_only,        & 
+                                        & ScatterModel%aniso_dist,          & 
+                                        & ScatterModel%E_min ,              & 
+                                        & ScatterModel%E_max,               & 
+                                        & verbosity = 2                     )
+    Call Finish_Scatter_Model_Setup(ScatterModel,.TRUE.,CrossSections%n_a_max,CrossSections%n_a_tab_max,CrossSections%n_iso)
+Else !cross sections are not needed if atmosphere is disabled
+    Call Finish_Scatter_Model_Setup(ScatterModel,.FALSE.)
+End If
 source = Setup_Source( paths_files%setup_file,          & 
                      & paths_files%resources_directory, & 
                      & paths_files%run_file_name,       & 
@@ -199,7 +212,7 @@ Do !run histories, periodically updating progress to the display if required
         End If
     End If
     !run a history
-    Call Do_Neutron(source,detector,atmosphere,ScatterModel,RNG,contributed)
+    Call Do_Neutron(source,detector,CrossSections,atmosphere,ScatterModel,RNG,contributed)
     n_done = n_done + 1_id
     If (contributed .OR. absolute_n_histories) Then
         p = p + 1_id

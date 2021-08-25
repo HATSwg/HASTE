@@ -8,21 +8,23 @@ We welcome all kinds of input! Feel free to:
 ## Writing Code for HASTE
 We're open to ANY contributions to improve the project, but expect *energetic* discussion to justify code not following these guidlines!
 - HASTE is written exclusively in modern Fortran (specifically Fortran 2008). We are not equipped to support a multi-language project at this time.
-- Avoid the use of language extensions. Where extensions are used, specify conditional compilation (by a "C-style" preprocessor) for the code utilizing the language extension with alternative standard-compliant code as the default compilation path. Conditional flags for gFortran and Intel Fortran are currently in use in the code (GFORT and IFORT respectively).
+- Avoid the use of language extensions. Where extensions are used, specify conditional compilation (by a "C-style" preprocessor) for the code utilizing the language extension with alternative standard-compliant code as the default compilation path. Conditional flags for GNU-Fortran and Intel-Fortran are currently in use in the code (GFORT and IFORT respectively).
+  - Contributed code **must** have a standard-compliant compilation path.  i.e. Contributed features cannot be solely dependent on language extensions.
+  - The same applies for Fortran language features newer than those included in the 2008 standard.
 - Strive to be self-documenting! Thoroughly comment your code (describe the procedure throughout the procedure) and use descriptive procedure/variable names.
-- Avoid use of variables with the SAVE attribute (this includes module variables and some other data-sharing constructs). These can introduce challenges when adapting the code for massivley parallel architectures. Similarly, avoid use of recursive procedures where recursion could result in side-effects or other inintended behavior.
+- Avoid use of variables with the SAVE attribute (this includes module variables and some other data-sharing constructs). These can introduce challenges when adapting the code for massivley parallel architectures. Similarly, avoid use of recursive procedures where recursion could result in side-effects or other unintended behavior.
 - **NO deleted or depreciated language features.** This includes `GOTO`, `ASSIGN`, integer `FORMAT`, and `PAUSE` among others. Use modern and standard-compliant code in these instances.
   - Avoid use of obsolescent features such as `COMMON` blocks, `DATA` statements, and `FORALL` statements or constructs (there are better modern ways to achieve the same behavior).
-- **NO implicit typing... EVER.** All types **must** be explicitly declared. ALL modules and procedures **must** have **`Implicit None`** declared in their scope. Mixed-type arithmetic should be coded with explicit standard-compliant type-conversions.
+- **NO implicit typing... EVER.** Types for all variables and parameters **must** be explicitly declared. **ALL** modules and procedures **must** have **`Implicit None`** declared in their scope. Mixed-type arithmetic should be coded with explicit standard-compliant type-conversions.  And (just in case you missed it) **NO implicit typing... EVER.**
 - Order your indexes appropriately for efficient memory access. Fortran array indexes are in **column-major** order. If an array is going to be sliced or accessed sequentially frequently, the index along which it is going to be sliced should be the lowest dimension. i.e.:
   - Slicing:
     - `a(:,1)` accesses a slice of the array that is stored contiguously in memory (this is fast).
     - `a(1,:)` must construct the slice from elements that are **not** adjacent to one another in memory (this is slow).
-  - Sequential access: The lowest dimension should be incremented the fastest so that the array is travesed contiguously in memory.
+  - Sequential access: The lowest dimension should be incremented the fastest so that the array is traversed contiguously in memory.
     ```
     Do i = 1,n
       Do j = 1,m
-        x = a(j,i)
+        x = a(j,i) !<--Note the order of indexes for fast memory access
       End Do
     End Do
     ```
