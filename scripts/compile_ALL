@@ -17,7 +17,6 @@ FNAME="Interpolation"; . ${SCR_PATH}compile_it
 FNAME="Legendre_Utilities"; . ${SCR_PATH}compile_it
 FNAME="Sorting"; . ${SCR_PATH}compile_it
 FNAME="PRNGs"; . ${SCR_PATH}compile_it
-FNAME="Random_Numbers"; . ${SCR_PATH}compile_it
 FNAME="Statistics"; . ${SCR_PATH}compile_it
 FNAME="Root_Solvers"; . ${SCR_PATH}compile_it
 FNAME="Gauss_Legendre_w_a"; . ${SCR_PATH}compile_it
@@ -38,6 +37,7 @@ FNAME="Particle_Piles"; . ${SCR_PATH}compile_it
 FNAME="cs_Utilities"; . ${SCR_PATH}compile_it
 FNAME="Neutron_Utilities"; . ${SCR_PATH}compile_it
 FNAME="n_Cross_Sections"; . ${SCR_PATH}compile_it
+FNAME="Random_Numbers"; . ${SCR_PATH}compile_it
 FNAME="Random_Directions"; . ${SCR_PATH}compile_it
 
 # MAIN CODE MODULES

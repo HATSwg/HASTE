@@ -16,7 +16,6 @@ FNAME="FileIO_Utilities"; . ${SCR_PATH}compile_it
 FNAME="Interpolation"; . ${SCR_PATH}compile_it
 FNAME="Legendre_Utilities"; . ${SCR_PATH}compile_it
 FNAME="PRNGs"; . ${SCR_PATH}compile_it
-FNAME="Random_Numbers"; . ${SCR_PATH}compile_it
 
 # ASTRO MODULES
 SRC_PATH="../source/astro/"
@@ -30,6 +29,7 @@ FNAME="USSA76"; . ${SCR_PATH}compile_it
 SRC_PATH="../source/parts/"
 FNAME="cs_Utilities"; . ${SCR_PATH}compile_it
 FNAME="Neutron_Utilities"; . ${SCR_PATH}compile_it
+FNAME="Random_Numbers"; . ${SCR_PATH}compile_it
 FNAME="Random_Directions"; . ${SCR_PATH}compile_it
 
 # MAIN CODE MODULES

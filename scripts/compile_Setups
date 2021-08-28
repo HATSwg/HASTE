@@ -14,6 +14,10 @@ FNAME="FileIO_Utilities"; . ${SCR_PATH}compile_it
 FNAME="PRNGs"; . ${SCR_PATH}compile_it
 FNAME="Random_Numbers"; . ${SCR_PATH}compile_it
 
+# PARTICLE UTILITIES MODULES
+SRC_PATH="../source/parts/"
+FNAME="Random_Numbers"; . ${SCR_PATH}compile_it
+
 # MAIN CODE MODULES
 SRC_PATH="../source/"
 FNAME="Setups"; . ${SCR_PATH}compile_it
